@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="noindex" />
+  <title>Client Admin — Clean Books</title>
+  <link rel="stylesheet" href="../assets/styles.css" />
+  <link rel="stylesheet" href="../assets/admin.css" />
+</head>
+<body>
+  <div class="admin-wrap">
+    <header class="admin-head">
+      <div class="brand">
+        <img class="brand-img" src="../assets/clean-books-logo.png" alt="Clean Books"
+             onerror="this.style.display='none';this.nextElementSibling.style.display='flex';" />
+        <span class="wordmark"><span class="broom">🧹</span><b class="g">Clean</b><b class="b">Books</b></span>
+      </div>
+      <div id="who" class="who" hidden>
+        <span id="whoEmail"></span>
+        <button id="signout" class="btn-ghost">Sign out</button>
+      </div>
+    </header>
+
+    <!-- signed out -->
+    <section id="login" class="card center" hidden>
+      <h1>Client Admin</h1>
+      <p class="sub">Sign in to manage your client upload forms.</p>
+      <button id="signin" class="btn-google">Sign in with Google</button>
+    </section>
+
+    <!-- wrong account -->
+    <section id="denied" class="card center" hidden>
+      <h1>Not authorized</h1>
+      <p class="sub">This admin is restricted. You're signed in as <b id="deniedEmail"></b>.</p>
+      <button id="signout2" class="btn-ghost">Sign out</button>
+    </section>
+
+    <!-- dashboard -->
+    <section id="dash" hidden>
+      <div class="dash-head">
+        <h1>Client Forms</h1>
+        <button id="addBtn" class="btn-primary">+ Add New Client</button>
+      </div>
+      <div id="banner" class="banner"></div>
+      <div class="card table-card">
+        <table class="clients">
+          <thead><tr><th>Client</th><th>Form URL</th><th>Created</th><th></th></tr></thead>
+          <tbody id="rows"></tbody>
+        </table>
+        <p id="empty" class="muted center" hidden style="padding:24px">No clients yet. Click "Add New Client" to create your first form.</p>
+      </div>
+    </section>
+  </div>
+
+  <!-- add client modal -->
+  <div id="modal" class="modal" hidden>
+    <div class="modal-card">
+      <h2>Add New Client</h2>
+      <form id="addForm">
+        <label class="req">Client name</label>
+        <input type="text" id="cname" placeholder="Acme Holdings, Inc." autocomplete="off" />
+        <label>Custom URL slug <span class="muted">(optional)</span></label>
+        <input type="text" id="cslug" placeholder="auto from name" autocomplete="off" />
+        <p class="muted" id="urlPreview" style="font-size:13px;margin:8px 0 0"></p>
+        <label>Client logo <span class="muted">(optional)</span></label>
+        <input type="file" id="clogo" accept="image/*" />
+        <div id="modalBanner" class="banner"></div>
+        <div class="modal-actions">
+          <button type="button" id="cancel" class="btn-ghost">Cancel</button>
+          <button type="submit" id="create" class="btn-primary">Create form</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="../config.js"></script>
+  <script type="module" src="../assets/admin.js"></script>
+</body>
+</html>
