@@ -73,11 +73,10 @@ key (needed to download files; gitignored).
 
 | # | Trigger | Command / action |
 |---|---------|------------------|
-| 3 | Scheduled (a few×/day) | `node tools/pull.mjs` — downloads new files to `inbox/<client>/`, sets status `downloaded`, writes `inbox/_last-pull.json`. Then Cowork creates a Notion row per file from the manifest. |
-| 4 | "process" | Cowork reads each file in `inbox/<client>/` and renames it `[Vendor or Name] [YYYY-MM-DD] [Amount].ext`; updates Notion `Renamed As` + status `Renamed`. |
-| 5 | You | Drag `inbox/<client>/` → Drive `Client Documents/<Client>/`. |
-| 6 | "add to Notion" | Cowork fetches Drive share links → updates Notion `Drive Link` + status `Filed`. |
-| 7 | "done" | `node tools/mark-processed.mjs --client <slug>` — sets Supabase `status='processed'` (original kept as backup); Notion status `Processed`. |
+| 3 | Scheduled (a few×/day) | `node tools/pull.mjs` downloads new files to `inbox/<client>/`, marks `downloaded`, writes `inbox/_last-pull.json`; Cowork ensures the client's Drive folder and creates a Notion row per file (Downloaded). |
+| 4 | You: "process" | For each file Cowork: reads it → renames `[Vendor] [YYYY-MM-DD] [Amount].ext` (descriptive fallback for non-financial docs, e.g. USPS notices) → **moves it into the local Drive folder** `G:\My Drive\Nerd Enterprises, Inc\Client Documents\<Client>\` (Drive for Desktop syncs it up automatically — no drag) → sets Notion `Renamed As` + `Drive Link` + status `Processed` → `tools/mark-processed.mjs <id>` marks the Supabase original processed (kept as backup). |
+
+> **Auto-Drive note:** filing is done by *moving* the file into the mounted Drive folder, not by uploading bytes through the connector (`create_file` needs inline base64 — impractical for large PDFs). Requires Google Drive for Desktop.
 
 Scripts:
 - `tools/pull.mjs` — pull new files + manifest (`--dry` to preview).
