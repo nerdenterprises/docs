@@ -50,6 +50,7 @@ html, body {
 .client-logo { height: 40px; width: auto; margin-left: auto; border-radius: 8px; }
 
 h1 { font-size: 23px; margin: 14px 0 0; line-height: 1.25; font-weight: 800; }
+.client-name { font-size: 28px; margin: 16px 0 2px; line-height: 1.2; font-weight: 800; color: var(--ink); }
 .sub { color: var(--muted); margin: 8px 0 26px; font-size: 15px; line-height: 1.55; }
 
 label { display: block; font-weight: 700; font-size: 14px; margin: 18px 0 6px; }

@@ -17,8 +17,13 @@ const supabase = createClient(cfg.url, cfg.anonKey);
   try {
     const { data } = await supabase.rpc("client_branding", { p_slug: client.slug });
     const b = Array.isArray(data) ? data[0] : null;
-    const el = document.getElementById("clientLogo");
-    if (b && b.logo_url && el) { el.src = b.logo_url; el.hidden = false; }
+    if (!b) return;
+    if (b.logo_url) { const el = document.getElementById("clientLogo"); if (el) { el.src = b.logo_url; el.hidden = false; } }
+    if (b.name) {
+      const nameEl = document.getElementById("clientName");
+      if (nameEl) nameEl.textContent = b.name;
+      document.title = `Upload Documents — ${b.name}`;
+    }
   } catch (_) { /* branding is best-effort */ }
 })();
 

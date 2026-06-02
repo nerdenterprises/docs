@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="robots" content="noindex" />
   <title>Client Admin — Clean Books</title>
-  <link rel="stylesheet" href="../assets/styles.css" />
-  <link rel="stylesheet" href="../assets/admin.css" />
+  <link rel="stylesheet" href="../assets/styles.css?v=3" />
+  <link rel="stylesheet" href="../assets/admin.css?v=3" />
 </head>
 <body>
   <div class="admin-wrap">
@@ -74,7 +74,27 @@
     </div>
   </div>
 
-  <script src="../config.js"></script>
-  <script type="module" src="../assets/admin.js"></script>
+  <!-- edit client modal -->
+  <div id="editModal" class="modal" hidden>
+    <div class="modal-card">
+      <h2>Edit Client</h2>
+      <form id="editForm">
+        <input type="hidden" id="eslug" />
+        <label class="req">Client name</label>
+        <input type="text" id="ename" autocomplete="off" />
+        <label>Replace logo <span class="muted">(optional — leave empty to keep current)</span></label>
+        <div id="ecurrentLogo" class="muted" style="font-size:13px;margin-bottom:6px"></div>
+        <input type="file" id="elogo" accept="image/*" />
+        <div id="editBanner" class="banner"></div>
+        <div class="modal-actions">
+          <button type="button" id="editCancel" class="btn-ghost">Cancel</button>
+          <button type="submit" id="editSave" class="btn-primary">Save changes</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="../config.js?v=3"></script>
+  <script type="module" src="../assets/admin.js?v=3"></script>
 </body>
 </html>

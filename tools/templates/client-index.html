@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="robots" content="noindex" />
   <title>Upload Documents — {{CLIENT_NAME}}</title>
-  <link rel="stylesheet" href="../assets/styles.css" />
+  <link rel="stylesheet" href="../assets/styles.css?v=3" />
 </head>
 <body>
   <div class="wrap">
@@ -16,11 +16,9 @@
         <span class="wordmark"><span class="broom">🧹</span><b class="g">Clean</b><b class="b">Books</b></span>
         <img class="client-logo" id="clientLogo" alt="" hidden />
       </div>
-      <h1>Upload your documents</h1>
-      <p class="sub">
-        Hi {{CLIENT_NAME}} — use this secure form to send your files to Nerd Enterprises.
-        Add your name, attach your documents, and submit. That's it.
-      </p>
+
+      <h1 class="client-name" id="clientName">{{CLIENT_NAME}}</h1>
+      <p class="sub" id="sub"><b>Upload your documents</b> — securely send your files to Nerd Enterprises. Add your name, attach your documents, and submit. That's it.</p>
 
       <div id="banner" class="banner"></div>
 
@@ -62,7 +60,7 @@
   <script>
     window.CLIENT = { slug: "{{CLIENT_SLUG}}" };
   </script>
-  <script src="../config.js"></script>
-  <script type="module" src="../assets/app.js"></script>
+  <script src="../config.js?v=3"></script>
+  <script type="module" src="../assets/app.js?v=3"></script>
 </body>
 </html>

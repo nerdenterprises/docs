@@ -41,7 +41,57 @@ function wire() {
   $("cancel").onclick = closeModal;
   $("cname").oninput = $("cslug").oninput = updatePreview;
   $("addForm").onsubmit = onCreate;
+  $("editCancel").onclick = closeEdit;
+  $("editForm").onsubmit = onEdit;
 }
+
+function openEdit(slug) {
+  const c = clientsCache.find((x) => x.slug === slug);
+  if (!c) return;
+  $("eslug").value = c.slug;
+  $("ename").value = c.name;
+  $("elogo").value = "";
+  $("ecurrentLogo").innerHTML = c.logo_url
+    ? `Current logo: <a href="${c.logo_url}" target="_blank" rel="noopener">view</a>`
+    : "No logo set.";
+  hideBanner("editBanner");
+  $("editModal").hidden = false;
+  $("ename").focus();
+}
+function closeEdit() { $("editModal").hidden = true; }
+
+async function onEdit(e) {
+  e.preventDefault();
+  const slug = $("eslug").value;
+  const name = $("ename").value.trim();
+  if (!name) { banner("editBanner", "Client name can't be empty.", "error"); return; }
+  const btn = $("editSave");
+  btn.disabled = true; btn.textContent = "Saving…";
+  try {
+    let logo_base64 = null, logo_content_type = null, logo_ext = null;
+    const file = $("elogo").files[0];
+    if (file) {
+      logo_base64 = await fileToB64(file);
+      logo_content_type = file.type || "image/png";
+      logo_ext = (file.name.split(".").pop() || "png").toLowerCase().replace(/[^a-z0-9]/g, "") || "png";
+    }
+    const { data, error } = await supabase.functions.invoke("update-client", {
+      body: { slug, name, logo_base64, logo_content_type, logo_ext },
+    });
+    let payload = data;
+    if (error) { try { payload = await error.context.json(); } catch { /* ignore */ } }
+    if (!payload?.ok) throw new Error(payload?.error || error?.message || "Update failed");
+    closeEdit();
+    banner("banner", `✓ Updated “${payload.name}”.`, "ok");
+    loadClients();
+  } catch (err) {
+    banner("editBanner", err.message, "error");
+  } finally {
+    btn.disabled = false; btn.textContent = "Save changes";
+  }
+}
+
+let clientsCache = [];
 
 async function loadClients() {
   const { data, error } = await supabase
@@ -52,6 +102,7 @@ async function loadClients() {
   const tbody = $("rows");
   tbody.innerHTML = "";
   if (error) { banner("banner", `Could not load clients: ${error.message}`, "error"); return; }
+  clientsCache = data;
 
   $("empty").hidden = data.length > 0;
   for (const c of data) {
@@ -65,6 +116,7 @@ async function loadClients() {
       <td><a class="url-link" href="${url}" target="_blank" rel="noopener">${url}</a></td>
       <td class="muted">${fmtDate(c.created_at)}</td>
       <td><div class="row-actions">
+        <button class="btn-ghost" data-edit="${esc(c.slug)}">Edit</button>
         <button class="btn-ghost" data-copy="${url}">Copy</button>
         <button class="btn-ghost" data-open="${url}">Open</button>
       </div></td>`;
@@ -73,6 +125,7 @@ async function loadClients() {
   tbody.querySelectorAll("[data-copy]").forEach((b) =>
     (b.onclick = async () => { await navigator.clipboard.writeText(b.dataset.copy); b.textContent = "Copied!"; setTimeout(() => (b.textContent = "Copy"), 1200); }));
   tbody.querySelectorAll("[data-open]").forEach((b) => (b.onclick = () => window.open(b.dataset.open, "_blank")));
+  tbody.querySelectorAll("[data-edit]").forEach((b) => (b.onclick = () => openEdit(b.dataset.edit)));
 }
 
 async function onCreate(e) {
