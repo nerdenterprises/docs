@@ -61,6 +61,25 @@ nothing else to provision.
 - Bucket: `client-docs` (private, 100 MB/file)
 - Tables: `public.submissions` (work queue), `public.clients` (registry)
 
-## Processing pipeline
+## Processing pipeline (Cowork)
 
-See `tools/` (Cowork-driven; documented separately as it's built out).
+Tracked in the Notion **Client Document Intake** database
+(`Status`: New → Downloaded → Renamed → Filed → Processed). Files for a client
+land in Google Drive under `Client Documents/<Client>/`; lifecycle is tracked by
+Notion status (no separate Processing/Permanent folders).
+
+Setup once: copy `.env.example` → `.env` and paste the Supabase `service_role`
+key (needed to download files; gitignored).
+
+| # | Trigger | Command / action |
+|---|---------|------------------|
+| 3 | Scheduled (a few×/day) | `node tools/pull.mjs` — downloads new files to `inbox/<client>/`, sets status `downloaded`, writes `inbox/_last-pull.json`. Then Cowork creates a Notion row per file from the manifest. |
+| 4 | "process" | Cowork reads each file in `inbox/<client>/` and renames it `[Vendor or Name] [YYYY-MM-DD] [Amount].ext`; updates Notion `Renamed As` + status `Renamed`. |
+| 5 | You | Drag `inbox/<client>/` → Drive `Client Documents/<Client>/`. |
+| 6 | "add to Notion" | Cowork fetches Drive share links → updates Notion `Drive Link` + status `Filed`. |
+| 7 | "done" | `node tools/mark-processed.mjs --client <slug>` — sets Supabase `status='processed'` (original kept as backup); Notion status `Processed`. |
+
+Scripts:
+- `tools/pull.mjs` — pull new files + manifest (`--dry` to preview).
+- `tools/mark-processed.mjs` — mark originals processed (by id, or `--client <slug>`).
+- `tools/lib.mjs` — shared helpers (dependency-free; Node 20.12+).
