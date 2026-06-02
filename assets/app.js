@@ -9,7 +9,13 @@ const client = window.CLIENT || {};
 const MAX_BYTES = 100 * 1024 * 1024; // 100 MB per file
 const MAX_FILES = 25;
 
-const supabase = createClient(cfg.url, cfg.anonKey);
+// Always use the anon key — never pick up an existing admin session from
+// localStorage (admin and forms share the same origin). This ensures uploads
+// always go through the insert-only anon RLS policy regardless of who is
+// logged into the admin page.
+const supabase = createClient(cfg.url, cfg.anonKey, {
+  auth: { persistSession: false, autoRefreshToken: false },
+});
 
 // Show the client's own logo (if one was uploaded) via the public branding lookup.
 (async () => {
