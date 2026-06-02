@@ -11,6 +11,17 @@ const MAX_FILES = 25;
 
 const supabase = createClient(cfg.url, cfg.anonKey);
 
+// Show the client's own logo (if one was uploaded) via the public branding lookup.
+(async () => {
+  if (!client.slug) return;
+  try {
+    const { data } = await supabase.rpc("client_branding", { p_slug: client.slug });
+    const b = Array.isArray(data) ? data[0] : null;
+    const el = document.getElementById("clientLogo");
+    if (b && b.logo_url && el) { el.src = b.logo_url; el.hidden = false; }
+  } catch (_) { /* branding is best-effort */ }
+})();
+
 const $ = (sel) => document.querySelector(sel);
 let queue = []; // File[]
 
