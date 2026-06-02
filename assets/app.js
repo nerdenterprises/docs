@@ -136,7 +136,9 @@ $("#form").addEventListener("submit", async (e) => {
 // ---- helpers --------------------------------------------------------------
 function buildPath(slug, filename) {
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-  const safe = filename.normalize("NFKD").replace(/[^\w.\- ]+/g, "_").replace(/\s+/g, " ").trim();
+  // Storage keys must avoid spaces & special chars — keep only [A-Za-z0-9._-].
+  // (The real filename, spaces and all, is preserved in original_filename.)
+  const safe = filename.normalize("NFKD").replace(/[^A-Za-z0-9.\-]+/g, "_").replace(/_+/g, "_").replace(/^_+|_+$/g, "") || "file";
   return `${slug}/${stamp}__${safe}`;
 }
 function setStat(li, text) {
