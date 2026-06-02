@@ -84,19 +84,19 @@ async function onCreate(e) {
   btn.disabled = true; btn.textContent = "Creating…";
 
   try {
-    // 1) Upload logo if provided
-    let logo_url = null;
+    // 1) Read the logo (if any) as base64 — the edge function uploads it (service role).
+    let logo_base64 = null, logo_content_type = null, logo_ext = null;
     const file = $("clogo").files[0];
     if (file) {
-      const ext = (file.name.split(".").pop() || "png").toLowerCase().replace(/[^a-z0-9]/g, "");
-      const path = `${slug}.${ext}`;
-      const { error: upErr } = await supabase.storage.from("client-logos").upload(path, file, { upsert: true, contentType: file.type });
-      if (upErr) throw new Error(`Logo upload failed: ${upErr.message}`);
-      logo_url = supabase.storage.from("client-logos").getPublicUrl(path).data.publicUrl;
+      logo_base64 = await fileToB64(file);
+      logo_content_type = file.type || "image/png";
+      logo_ext = (file.name.split(".").pop() || "png").toLowerCase().replace(/[^a-z0-9]/g, "") || "png";
     }
 
-    // 2) Create the client (edge function: commits form + registers client)
-    const { data, error } = await supabase.functions.invoke("create-client", { body: { name, slug, logo_url } });
+    // 2) Create the client (edge function commits form, uploads logo, registers client)
+    const { data, error } = await supabase.functions.invoke("create-client", {
+      body: { name, slug, logo_base64, logo_content_type, logo_ext },
+    });
     let payload = data;
     if (error) { try { payload = await error.context.json(); } catch { /* ignore */ } }
     if (!payload?.ok) throw new Error(payload?.error || error?.message || "Create failed");
@@ -130,4 +130,12 @@ function initials(name) {
   return (name.replace(/[^A-Za-z ]/g, "").split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join("") || name.slice(0, 2).toUpperCase());
 }
 function esc(s) { return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
+function fileToB64(file) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result).split(",")[1]);
+    r.onerror = reject;
+    r.readAsDataURL(file);
+  });
+}
 function fmtDate(iso) { const d = new Date(iso); return d.toLocaleDateString(undefined, { month: "short", day: "numeric" }); }
