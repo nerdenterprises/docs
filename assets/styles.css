@@ -17,6 +17,10 @@
 
 * { box-sizing: border-box; }
 
+/* The [hidden] attribute must always win over class-based display rules
+   (e.g. .modal{display:grid}, .who{display:flex}). */
+[hidden] { display: none !important; }
+
 html, body {
   margin: 0;
   padding: 0;
