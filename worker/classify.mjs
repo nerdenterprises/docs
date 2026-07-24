@@ -96,8 +96,10 @@ const SCHEMA = {
 
 async function askClaude(model, { text, filename, pdfBytes }) {
   const sys = 'You classify a business/financial document for filing. Return ONLY the classify tool call. '
-    + 'Date is the single most relevant date (statement close date preferred) as YYYY-MM-DD. '
-    + 'suggested_name is a clean, human, descriptive filename without extension.';
+    + 'vendor: use the MOST SPECIFIC issuer/brand actually named anywhere in the document (e.g. "Kaiser Permanente", "Chase", "PG&E"). '
+    + 'Only use a generic label (e.g. "Medical Provider") if NO issuer name appears anywhere in the text. '
+    + 'date: the single most relevant date (statement close / invoice / appointment date) as YYYY-MM-DD, else empty. '
+    + 'suggested_name: a clean, human, descriptive filename WITHOUT extension, leading with the vendor when known.';
   const content = [];
   content.push({ type: 'text', text: `Filename: ${filename}` });
   if (text && text.trim()) {

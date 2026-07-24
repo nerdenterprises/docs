@@ -6,7 +6,7 @@
   <meta name="robots" content="noindex" />
   <title>Client Admin — Clean Books</title>
   <link rel="stylesheet" href="../assets/styles.css?v=4" />
-  <link rel="stylesheet" href="../assets/admin.css?v=6" />
+  <link rel="stylesheet" href="../assets/admin.css?v=7" />
 </head>
 <body>
   <div class="admin-wrap">
@@ -69,6 +69,12 @@
         <div id="progressStats" class="muted"></div>
       </div>
 
+      <!-- needs review -->
+      <div id="review" class="card review-card" hidden>
+        <div class="review-head"><b>⚠️ Needs review</b><span id="reviewCount" class="muted"></span></div>
+        <div id="reviewList"></div>
+      </div>
+
       <div class="card table-card">
         <table class="clients">
           <thead><tr><th>Client</th><th>Form URL</th><th>Created</th><th></th></tr></thead>
@@ -127,6 +133,6 @@
   </div>
 
   <script src="../config.js?v=4"></script>
-  <script type="module" src="../assets/admin.js?v=7"></script>
+  <script type="module" src="../assets/admin.js?v=8"></script>
 </body>
 </html>

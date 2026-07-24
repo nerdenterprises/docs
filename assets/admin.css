@@ -101,3 +101,12 @@ table.clients tr:last-child td { border-bottom: none; }
 .list-toolbar select:focus { outline: none; border-color: var(--green); }
 #clientCount { font-size: 13px; white-space: nowrap; }
 @media (max-width: 640px) { .list-toolbar { flex-wrap: wrap; } .list-toolbar input[type="search"] { flex-basis: 100%; } }
+
+/* needs review */
+.review-card { padding: 14px 18px; margin-bottom: 16px; border-left: 4px solid var(--err); }
+.review-head { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+.review-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); }
+.review-row:first-of-type { border-top: none; }
+.review-name { font-weight: 600; font-size: 14px; word-break: break-word; }
+.review-meta { font-size: 12px; margin-top: 2px; }
+.review-actions { display: flex; gap: 6px; flex: none; }

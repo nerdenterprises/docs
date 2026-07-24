@@ -42,6 +42,13 @@ export async function patchClient(slug, patch) {
   });
 }
 
+/** Checkpoint partial progress on a job (drive_id, notion_page_id, cls, …) for idempotent retries. */
+export async function patchJobResult(jobId, result) {
+  await rest(`/rest/v1/jobs?id=eq.${jobId}`, {
+    method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ result }),
+  });
+}
+
 export async function markSubmissionProcessed(id) {
   await rest(`/rest/v1/submissions?id=eq.${id}`, {
     method: 'PATCH', headers: { Prefer: 'return=minimal' },

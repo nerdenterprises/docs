@@ -52,6 +52,23 @@ Deno.serve(async (req) => {
     trigger = body.mode === "all" ? "all" : "client";
   }
 
+  // --- retry a single failed/needs_review job (admin only) ---
+  if (body.mode === "retry") {
+    if (trigger === "cron") return json({ error: "retry requires admin" }, 403);
+    if (!body.job_id) return json({ error: "job_id required" }, 400);
+    const { data: jrow, error: jerr } = await admin.from("jobs")
+      .update({ status: "queued", error_text: null })
+      .eq("id", body.job_id).select("run_id").maybeSingle();
+    if (jerr || !jrow) return json({ error: jerr?.message || "job not found" }, 404);
+    const wu = secrets["worker_url"], ws = secrets["worker_shared_secret"];
+    if (wu && ws) {
+      const kick = fetch(wu, { method: "POST", headers: { "content-type": "application/json", "x-worker-secret": ws }, body: JSON.stringify({ run_id: jrow.run_id }) }).catch(() => {});
+      // @ts-ignore EdgeRuntime is provided by Supabase
+      if (typeof EdgeRuntime !== "undefined") EdgeRuntime.waitUntil(kick);
+    }
+    return json({ ok: true, retried: body.job_id, run_id: jrow.run_id }, 202);
+  }
+
   const slug = trigger === "all" || trigger === "cron" ? null : (body.slug ?? null);
   if (trigger === "client" && !slug) return json({ error: "slug required for client mode" }, 400);
 

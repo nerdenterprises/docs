@@ -15,48 +15,65 @@ const extOf = (name) => (name.split('.').pop() || 'pdf').toLowerCase();
 async function processOne(job) {
   const client = await supa.getClient(job.client_slug);
   if (!client) throw new Error(`Unknown client_slug ${job.client_slug}`);
-
-  const bytes = await supa.downloadObject(job.file_path);
   const ext = extOf(job.original_filename || job.file_path);
+  const result = { ...(job.result || {}) }; // resume from any checkpointed progress
 
-  const { text, method, pdfBytes } = await extractText(bytes, ext);
-  const cls = await classifyDoc({ text, filename: job.original_filename, pdfBytes });
-  if (cls.needs_review) {
-    await supa.finalizeJob(job.job_id, 'needs_review', { reason: cls.reason, method }, null);
-    return 'needs_review';
+  // --- 1. classify (checkpointed): skip re-extraction/LLM on retry ---
+  if (!result.cls) {
+    const bytes = await supa.downloadObject(job.file_path);
+    const { text, method, pdfBytes } = await extractText(bytes, ext);
+    const cls = await classifyDoc({ text, filename: job.original_filename, pdfBytes });
+    if (cls.needs_review) {
+      await supa.finalizeJob(job.job_id, 'needs_review', { reason: cls.reason, method }, null);
+      return 'needs_review';
+    }
+    result.cls = cls;
+    result.method = method;
+    result.renamed = buildName(cls, ext);
+    await supa.patchJobResult(job.job_id, result);
   }
-
-  const fileName = buildName(cls, ext);
+  const cls = result.cls;
+  const fileName = result.renamed || buildName(cls, ext);
   const title = fileName.replace(/\.[^.]+$/, '');
 
-  // Drive: resolve/create folder (cache it), upload, capture share link.
-  let processedId = client.drive_processed_folder_id;
-  if (!processedId) {
-    const r = await drive.resolveProcessedFolder(client);
-    processedId = typeof r === 'string' ? r : r.processed;
-    const patch = { drive_processed_folder_id: processedId };
-    if (typeof r !== 'string' && r.clientFolder && !client.drive_folder_id) patch.drive_folder_id = r.clientFolder;
-    await supa.patchClient(client.slug, patch);
+  // --- 2. Drive upload (checkpointed): reuse the file on retry, never duplicate ---
+  if (!result.drive_id) {
+    let processedId = client.drive_processed_folder_id;
+    if (!processedId) {
+      const r = await drive.resolveProcessedFolder(client);
+      processedId = typeof r === 'string' ? r : r.processed;
+      const patch = { drive_processed_folder_id: processedId };
+      if (typeof r !== 'string' && r.clientFolder && !client.drive_folder_id) patch.drive_folder_id = r.clientFolder;
+      await supa.patchClient(client.slug, patch);
+    }
+    const bytes = await supa.downloadObject(job.file_path);
+    const mime = ext === 'csv' ? 'text/csv' : ext === 'pdf' ? 'application/pdf' : 'application/octet-stream';
+    const up = await drive.uploadFile(processedId, fileName, bytes, mime);
+    result.drive_id = up.id;
+    result.drive_link = up.webViewLink;
+    await supa.patchJobResult(job.job_id, result);
   }
-  const mime = ext === 'csv' ? 'text/csv' : ext === 'pdf' ? 'application/pdf' : 'application/octet-stream';
-  const { id: driveId, webViewLink } = await drive.uploadFile(processedId, fileName, bytes, mime);
 
-  // Notion: resolve member (cache it), then the single enforced writer.
-  let memberPageId = client.notion_member_page_id;
-  if (!memberPageId) {
-    memberPageId = await notion.resolveMemberPageId(client.display_name || client.name);
-    await supa.patchClient(client.slug, { notion_member_page_id: memberPageId });
+  // --- 3. Notion row (checkpointed): skip if already created ---
+  if (!result.notion_page_id) {
+    let memberPageId = client.notion_member_page_id;
+    if (!memberPageId) {
+      memberPageId = await notion.resolveMemberPageId(client.display_name || client.name);
+      await supa.patchClient(client.slug, { notion_member_page_id: memberPageId });
+    }
+    const props = notion.buildPageProperties({
+      title, docFileName: fileName, isoDate: cls.date || null, driveLink: result.drive_link,
+      memberPageId, category: cls.category, tags: cls.tags, institution: cls.institution,
+    });
+    result.notion_page_id = await notion.createDocumentRow(props);
+    await supa.patchJobResult(job.job_id, result);
   }
-  const props = notion.buildPageProperties({
-    title, docFileName: fileName, isoDate: cls.date || null, driveLink: webViewLink,
-    memberPageId, category: cls.category, tags: cls.tags, institution: cls.institution,
-  });
-  const notionPageId = await notion.createDocumentRow(props);
 
+  // --- 4. finalize ---
   await supa.markSubmissionProcessed(job.submission_id);
   await supa.finalizeJob(job.job_id, 'done', {
     vendor: cls.vendor, date: cls.date || null, renamed: fileName,
-    drive_id: driveId, drive_link: webViewLink, notion_page_id: notionPageId, method,
+    drive_id: result.drive_id, drive_link: result.drive_link, notion_page_id: result.notion_page_id, method: result.method,
   }, null);
   return 'done';
 }

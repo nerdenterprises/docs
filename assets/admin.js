@@ -31,6 +31,7 @@ function render(session) {
   $("whoEmail").textContent = user.email;
   show("dash");
   loadClients();
+  loadReview();
 }
 
 function wire() {
@@ -78,6 +79,7 @@ function pollRun(runId) {
       clearInterval(pollTimer); pollTimer = null;
       finishProgress("✓ Done.", run);
       loadClients();
+      loadReview();
     }
   };
   tick();
@@ -103,6 +105,56 @@ function finishProgress(title, run, isError) {
   $("progressTitle").textContent = (isError ? "⚠ " : "") + title;
   if (run) renderProgress(run), ($("progressTitle").textContent = title);
   $("progressClose").hidden = false;
+}
+
+// ---- needs review ----
+async function loadReview() {
+  const { data, error } = await supabase
+    .from("jobs")
+    .select("id,status,error_text,result,client_slug,created_at,submissions(original_filename)")
+    .in("status", ["needs_review", "error"])
+    .order("created_at", { ascending: false });
+
+  const card = $("review"), list = $("reviewList");
+  if (error || !data || data.length === 0) { card.hidden = true; return; }
+  $("reviewCount").textContent = `${data.length} item${data.length === 1 ? "" : "s"}`;
+  list.innerHTML = "";
+  for (const j of data) {
+    const fn = j.submissions?.original_filename || "(unknown file)";
+    const reason = j.status === "error" ? (j.error_text || "error") : (j.result?.reason || "low confidence");
+    const link = j.result?.drive_link;
+    const badge = j.status === "error" ? "⛔ error" : "🔎 needs review";
+    const row = document.createElement("div");
+    row.className = "review-row";
+    row.innerHTML = `
+      <div class="review-info">
+        <div class="review-name">${esc(fn)}</div>
+        <div class="review-meta muted">/${esc(j.client_slug)} · ${badge} · ${esc(String(reason).slice(0, 160))}</div>
+      </div>
+      <div class="review-actions">
+        ${link ? `<button class="btn-ghost" data-review-open="${esc(link)}">Open</button>` : ""}
+        <button class="btn-ghost" data-review-retry="${esc(j.id)}">Retry</button>
+      </div>`;
+    list.appendChild(row);
+  }
+  list.querySelectorAll("[data-review-open]").forEach((b) => (b.onclick = () => window.open(b.dataset.reviewOpen, "_blank")));
+  list.querySelectorAll("[data-review-retry]").forEach((b) => (b.onclick = () => retryJob(b.dataset.reviewRetry, b)));
+  card.hidden = false;
+}
+
+async function retryJob(jobId, btn) {
+  btn.disabled = true; btn.textContent = "Retrying…";
+  try {
+    const { data, error } = await supabase.functions.invoke("process-enqueue", { body: { mode: "retry", job_id: jobId } });
+    let payload = data;
+    if (error) { try { payload = await error.context.json(); } catch { /* ignore */ } }
+    if (!payload?.ok) throw new Error(payload?.error || error?.message || "Retry failed");
+    banner("banner", "↻ Retrying — this refreshes in a few seconds.", "ok");
+    setTimeout(() => { loadReview(); loadClients(); }, 4000);
+  } catch (e) {
+    banner("banner", e.message, "error");
+    btn.disabled = false; btn.textContent = "Retry";
+  }
 }
 
 function openEdit(slug) {
