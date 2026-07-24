@@ -46,6 +46,8 @@ function wire() {
   $("editForm").onsubmit = onEdit;
   $("processAllBtn").onclick = () => processDocs("all", null);
   $("progressClose").onclick = () => { $("progress").hidden = true; };
+  $("clientFilter").oninput = renderClients;
+  $("clientSort").onchange = renderClients;
 }
 
 // ---- document processing ----
@@ -156,14 +158,41 @@ async function loadClients() {
     .from("clients")
     .select("slug,name,logo_url,created_at,active")
     .order("created_at", { ascending: false });
+  if (error) { banner("banner", `Could not load clients: ${error.message}`, "error"); return; }
+  clientsCache = data || [];
+  renderClients();
+}
+
+function renderClients() {
+  const q = ($("clientFilter")?.value || "").trim().toLowerCase();
+  const sort = $("clientSort")?.value || "created_desc";
+
+  let list = clientsCache.slice();
+  if (q) list = list.filter((c) => c.name.toLowerCase().includes(q) || c.slug.toLowerCase().includes(q));
+  list.sort((a, b) => {
+    switch (sort) {
+      case "name_asc": return a.name.localeCompare(b.name);
+      case "name_desc": return b.name.localeCompare(a.name);
+      case "created_asc": return new Date(a.created_at) - new Date(b.created_at);
+      default: return new Date(b.created_at) - new Date(a.created_at);
+    }
+  });
+
+  // toolbar count
+  const countEl = $("clientCount");
+  if (countEl) countEl.textContent = q
+    ? `${list.length} of ${clientsCache.length}`
+    : `${clientsCache.length} client${clientsCache.length === 1 ? "" : "s"}`;
+
+  // empty states: nothing at all vs. nothing matching the filter
+  const empty = $("empty");
+  if (clientsCache.length === 0) { empty.textContent = 'No clients yet. Click "Add New Client" to create your first form.'; empty.hidden = false; }
+  else if (list.length === 0) { empty.textContent = `No clients match “${q}”.`; empty.hidden = false; }
+  else empty.hidden = true;
 
   const tbody = $("rows");
   tbody.innerHTML = "";
-  if (error) { banner("banner", `Could not load clients: ${error.message}`, "error"); return; }
-  clientsCache = data;
-
-  $("empty").hidden = data.length > 0;
-  for (const c of data) {
+  for (const c of list) {
     const url = `https://${DOMAIN}/${c.slug}/`;
     const tr = document.createElement("tr");
     const logo = c.logo_url

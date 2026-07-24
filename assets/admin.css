@@ -87,3 +87,17 @@ table.clients tr:last-child td { border-bottom: none; }
 }
 .modal-card select:focus { outline: none; border-color: var(--green); }
 #cnewmemberWrap { margin-top: 10px; }
+
+/* filter + sort toolbar */
+.list-toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+.list-toolbar input[type="search"] {
+  flex: 1; padding: 10px 14px; border: 1px solid var(--line); border-radius: 11px; font-size: 14px;
+}
+.list-toolbar input[type="search"]:focus { outline: none; border-color: var(--green); }
+.list-toolbar select {
+  padding: 10px 12px; border: 1px solid var(--line); border-radius: 11px; font-size: 14px;
+  background: #fff; color: var(--ink); cursor: pointer;
+}
+.list-toolbar select:focus { outline: none; border-color: var(--green); }
+#clientCount { font-size: 13px; white-space: nowrap; }
+@media (max-width: 640px) { .list-toolbar { flex-wrap: wrap; } .list-toolbar input[type="search"] { flex-basis: 100%; } }
