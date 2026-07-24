@@ -86,6 +86,19 @@ Deno.serve(async (req) => {
     return json(out, r.ok ? 200 : 502);
   }
 
+  // --- mark a suggested group as "not a split" so it stops resurfacing (admin only) ---
+  if (body.mode === "dismiss_split") {
+    if (trigger === "cron") return json({ error: "dismiss_split requires admin" }, 403);
+    if (!Array.isArray(body.submission_ids) || body.submission_ids.length < 1) {
+      return json({ error: "submission_ids required" }, 400);
+    }
+    const { error: derr } = await admin.from("submissions")
+      .update({ split_reviewed_at: new Date().toISOString() })
+      .in("id", body.submission_ids);
+    if (derr) return json({ error: derr.message }, 500);
+    return json({ ok: true, dismissed: body.submission_ids.length });
+  }
+
   const slug = trigger === "all" || trigger === "cron" ? null : (body.slug ?? null);
   if (trigger === "client" && !slug) return json({ error: "slug required for client mode" }, 400);
 

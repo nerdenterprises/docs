@@ -160,55 +160,86 @@ async function retryJob(jobId, btn) {
 }
 
 // ---- combine split documents ----
-const dismissedSplits = new Set();
+// A "split" is ONE document uploaded as several files, so its parts share a
+// client, a detected vendor, and a statement date. We group on those structured
+// signals (from jobs.result) — never on upload timing, which only says files
+// arrived in the same batch, not that they're the same document. Dismissals are
+// persisted server-side (submissions.split_reviewed_at) so they never resurface.
+const MAX_SPLIT_GROUP = 8;
 
 async function loadSplits() {
-  const [subsRes, comboRes] = await Promise.all([
-    supabase.from("submissions").select("id,client_slug,original_filename,created_at").eq("status", "processed").order("created_at", { ascending: false }).limit(500),
+  const [jobsRes, comboRes] = await Promise.all([
+    supabase.from("jobs")
+      .select("submission_id,client_slug,created_at,result,submissions(original_filename,split_reviewed_at)")
+      .eq("status", "done").order("created_at", { ascending: false }).limit(1000),
     supabase.from("combined_docs").select("source_submission_ids"),
   ]);
-  const subs = (subsRes.data || []).filter((s) => (s.original_filename || "").toLowerCase().endsWith(".pdf"));
   const used = new Set();
   for (const c of comboRes.data || []) for (const id of c.source_submission_ids || []) used.add(id);
 
-  // group same-client uploads within 2 minutes of each other
-  subs.sort((a, b) => a.client_slug.localeCompare(b.client_slug) || new Date(a.created_at) - new Date(b.created_at));
-  const groups = [];
-  let cur = [];
-  const flush = () => { if (cur.length >= 2) groups.push(cur); cur = []; };
-  for (const s of subs) {
-    if (used.has(s.id)) { flush(); continue; }
-    if (!cur.length) { cur = [s]; continue; }
-    const prev = cur[cur.length - 1];
-    if (prev.client_slug === s.client_slug && Math.abs(new Date(s.created_at) - new Date(prev.created_at)) <= 120000) cur.push(s);
-    else { flush(); cur = [s]; }
+  // one row per submission (newest done job wins); keep only PDFs that still carry
+  // both signals we group on and haven't been combined or already dismissed
+  const seen = new Set();
+  const byKey = new Map();
+  for (const j of jobsRes.data || []) {
+    const id = j.submission_id;
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    const sub = j.submissions || {};
+    if (used.has(id) || sub.split_reviewed_at) continue;
+    const name = sub.original_filename || j.result?.renamed || "";
+    if (!name.toLowerCase().endsWith(".pdf")) continue;
+    const vendor = (j.result?.vendor || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+    const date = j.result?.date || "";
+    if (!vendor || !date) continue; // can't judge a split without both
+    const key = `${j.client_slug}|${vendor}|${date}`;
+    if (!byKey.has(key)) byKey.set(key, []);
+    byKey.get(key).push({ id, client_slug: j.client_slug, filename: name, created_at: j.created_at });
   }
-  flush();
 
-  const visible = groups.filter((g) => !dismissedSplits.has(g.map((s) => s.id).join(",")));
+  const groups = [...byKey.values()]
+    .filter((g) => g.length >= 2 && g.length <= MAX_SPLIT_GROUP)
+    .map((g) => g.sort((a, b) => new Date(a.created_at) - new Date(b.created_at)));
+
   const card = $("splits"), list = $("splitsList");
-  if (visible.length === 0) { card.hidden = true; return; }
+  if (groups.length === 0) { card.hidden = true; return; }
   list.innerHTML = "";
-  for (const g of visible) {
-    const key = g.map((s) => s.id).join(",");
-    const names = g.map((s) => esc(s.original_filename)).join("<br>");
+  for (const g of groups) {
+    const ids = g.map((s) => s.id);
+    const names = g.map((s) => esc(s.filename)).join("<br>");
     const row = document.createElement("div");
     row.className = "review-row";
     row.innerHTML = `
       <div class="review-info">
-        <div class="review-meta muted">/${esc(g[0].client_slug)} · ${g.length} files uploaded together</div>
+        <div class="review-meta muted">/${esc(g[0].client_slug)} · ${g.length} files · same vendor &amp; statement date</div>
         <div class="review-name" style="font-weight:500">${names}</div>
       </div>
       <div class="review-actions">
-        <button class="btn-ghost" data-split-dismiss="${esc(key)}">Not a split</button>
-        <button class="btn-primary" data-split-combine="${esc(key)}">Combine into one</button>
+        <button class="btn-ghost" data-split-dismiss>Not a split</button>
+        <button class="btn-primary" data-split-combine>Combine into one</button>
       </div>`;
     list.appendChild(row);
-    row.querySelector("[data-split-dismiss]").onclick = () => { dismissedSplits.add(key); loadSplits(); };
-    row.querySelector("[data-split-combine]").onclick = (e) =>
-      combineGroup(g.map((s) => s.id), g[0].client_slug, e.currentTarget, row);
+    row.querySelector("[data-split-dismiss]").onclick = (e) => dismissSplit(ids, e.currentTarget, row);
+    row.querySelector("[data-split-combine]").onclick = (e) => combineGroup(ids, g[0].client_slug, e.currentTarget, row);
   }
   card.hidden = false;
+}
+
+async function dismissSplit(ids, btn, rowEl) {
+  btn.disabled = true; btn.textContent = "…";
+  try {
+    const { data, error } = await supabase.functions.invoke("process-enqueue", {
+      body: { mode: "dismiss_split", submission_ids: ids },
+    });
+    let payload = data;
+    if (error) { try { payload = await error.context.json(); } catch { /* ignore */ } }
+    if (!payload?.ok) throw new Error(payload?.error || error?.message || "Dismiss failed");
+    rowEl.remove();
+    if ($("splitsList").children.length === 0) $("splits").hidden = true;
+  } catch (e) {
+    banner("banner", e.message, "error");
+    btn.disabled = false; btn.textContent = "Not a split";
+  }
 }
 
 async function combineGroup(ids, slug, btn, rowEl) {
