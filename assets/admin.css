@@ -109,4 +109,8 @@ table.clients tr:last-child td { border-bottom: none; }
 .review-row:first-of-type { border-top: none; }
 .review-name { font-weight: 600; font-size: 14px; word-break: break-word; }
 .review-meta { font-size: 12px; margin-top: 2px; }
-.review-actions { display: flex; gap: 6px; flex: none; }
+.review-actions { display: flex; gap: 6px; flex: none; align-items: center; }
+
+/* possible split documents */
+.splits-card { padding: 14px 18px; margin-bottom: 16px; border-left: 4px solid var(--blue); }
+.splits-card .btn-primary { padding: 8px 14px; font-size: 13px; }

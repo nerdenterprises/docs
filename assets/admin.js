@@ -32,6 +32,7 @@ function render(session) {
   show("dash");
   loadClients();
   loadReview();
+  loadSplits();
 }
 
 function wire() {
@@ -80,6 +81,7 @@ function pollRun(runId) {
       finishProgress("✓ Done.", run);
       loadClients();
       loadReview();
+      loadSplits();
     }
   };
   tick();
@@ -154,6 +156,76 @@ async function retryJob(jobId, btn) {
   } catch (e) {
     banner("banner", e.message, "error");
     btn.disabled = false; btn.textContent = "Retry";
+  }
+}
+
+// ---- combine split documents ----
+const dismissedSplits = new Set();
+
+async function loadSplits() {
+  const [subsRes, comboRes] = await Promise.all([
+    supabase.from("submissions").select("id,client_slug,original_filename,created_at").eq("status", "processed").order("created_at", { ascending: false }).limit(500),
+    supabase.from("combined_docs").select("source_submission_ids"),
+  ]);
+  const subs = (subsRes.data || []).filter((s) => (s.original_filename || "").toLowerCase().endsWith(".pdf"));
+  const used = new Set();
+  for (const c of comboRes.data || []) for (const id of c.source_submission_ids || []) used.add(id);
+
+  // group same-client uploads within 2 minutes of each other
+  subs.sort((a, b) => a.client_slug.localeCompare(b.client_slug) || new Date(a.created_at) - new Date(b.created_at));
+  const groups = [];
+  let cur = [];
+  const flush = () => { if (cur.length >= 2) groups.push(cur); cur = []; };
+  for (const s of subs) {
+    if (used.has(s.id)) { flush(); continue; }
+    if (!cur.length) { cur = [s]; continue; }
+    const prev = cur[cur.length - 1];
+    if (prev.client_slug === s.client_slug && Math.abs(new Date(s.created_at) - new Date(prev.created_at)) <= 120000) cur.push(s);
+    else { flush(); cur = [s]; }
+  }
+  flush();
+
+  const visible = groups.filter((g) => !dismissedSplits.has(g.map((s) => s.id).join(",")));
+  const card = $("splits"), list = $("splitsList");
+  if (visible.length === 0) { card.hidden = true; return; }
+  list.innerHTML = "";
+  for (const g of visible) {
+    const key = g.map((s) => s.id).join(",");
+    const names = g.map((s) => esc(s.original_filename)).join("<br>");
+    const row = document.createElement("div");
+    row.className = "review-row";
+    row.innerHTML = `
+      <div class="review-info">
+        <div class="review-meta muted">/${esc(g[0].client_slug)} · ${g.length} files uploaded together</div>
+        <div class="review-name" style="font-weight:500">${names}</div>
+      </div>
+      <div class="review-actions">
+        <button class="btn-ghost" data-split-dismiss="${esc(key)}">Not a split</button>
+        <button class="btn-primary" data-split-combine="${esc(key)}">Combine into one</button>
+      </div>`;
+    list.appendChild(row);
+    row.querySelector("[data-split-dismiss]").onclick = () => { dismissedSplits.add(key); loadSplits(); };
+    row.querySelector("[data-split-combine]").onclick = (e) =>
+      combineGroup(g.map((s) => s.id), g[0].client_slug, e.currentTarget, row);
+  }
+  card.hidden = false;
+}
+
+async function combineGroup(ids, slug, btn, rowEl) {
+  btn.disabled = true; btn.textContent = "Combining…";
+  try {
+    const { data, error } = await supabase.functions.invoke("process-enqueue", {
+      body: { mode: "combine", submission_ids: ids, client_slug: slug },
+    });
+    let payload = data;
+    if (error) { try { payload = await error.context.json(); } catch { /* ignore */ } }
+    if (!payload?.ok) throw new Error(payload?.error || error?.message || "Combine failed");
+    banner("banner", `✓ Combined ${payload.count} files → “${payload.renamed}” (originals kept).`, "ok");
+    rowEl.remove();
+    if ($("splitsList").children.length === 0) $("splits").hidden = true;
+  } catch (e) {
+    banner("banner", e.message, "error");
+    btn.disabled = false; btn.textContent = "Combine into one";
   }
 }
 

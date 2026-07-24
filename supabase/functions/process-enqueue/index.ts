@@ -69,6 +69,23 @@ Deno.serve(async (req) => {
     return json({ ok: true, retried: body.job_id, run_id: jrow.run_id }, 202);
   }
 
+  // --- combine multiple uploads into one document (admin only) ---
+  if (body.mode === "combine") {
+    if (trigger === "cron") return json({ error: "combine requires admin" }, 403);
+    if (!Array.isArray(body.submission_ids) || body.submission_ids.length < 2 || !body.client_slug) {
+      return json({ error: "submission_ids (2+) and client_slug required" }, 400);
+    }
+    const wu = secrets["worker_url"], ws = secrets["worker_shared_secret"];
+    if (!wu || !ws) return json({ error: "worker not configured" }, 500);
+    const r = await fetch(wu.replace(/\/run$/, "/combine"), {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-worker-secret": ws },
+      body: JSON.stringify({ submission_ids: body.submission_ids, client_slug: body.client_slug }),
+    });
+    const out = await r.json().catch(() => ({ ok: false, error: `worker ${r.status}` }));
+    return json(out, r.ok ? 200 : 502);
+  }
+
   const slug = trigger === "all" || trigger === "cron" ? null : (body.slug ?? null);
   if (trigger === "client" && !slug) return json({ error: "slug required for client mode" }, 400);
 

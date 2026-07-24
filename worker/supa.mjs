@@ -56,6 +56,21 @@ export async function markSubmissionProcessed(id) {
   });
 }
 
+/** Fetch multiple submissions by id (for combine). */
+export async function getSubmissions(ids) {
+  const list = ids.map(encodeURIComponent).join(',');
+  const res = await rest(`/rest/v1/submissions?id=in.(${list})&select=id,file_path,original_filename,created_at`);
+  return await res.json();
+}
+
+/** Record a combined document. */
+export async function insertCombinedDoc(row) {
+  const res = await rest('/rest/v1/combined_docs', {
+    method: 'POST', headers: { Prefer: 'return=representation' }, body: JSON.stringify(row),
+  });
+  return (await res.json())[0];
+}
+
 /** Download a Storage object as a Buffer. */
 export async function downloadObject(filePath) {
   const res = await fetch(

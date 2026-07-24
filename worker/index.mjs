@@ -9,6 +9,7 @@ import * as notion from './notion.mjs';
 import { extractText } from './extract.mjs';
 import { classifyDoc } from './classify.mjs';
 import { buildName } from './rename.mjs';
+import { combineDocs } from './combine.mjs';
 
 const extOf = (name) => (name.split('.').pop() || 'pdf').toLowerCase();
 
@@ -99,20 +100,24 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'GET' && req.url === '/health') {
     res.writeHead(200); res.end('ok'); return;
   }
-  if (req.method !== 'POST' || !req.url.startsWith('/run')) {
-    res.writeHead(404); res.end('not found'); return;
-  }
+  if (req.method !== 'POST') { res.writeHead(404); res.end('not found'); return; }
   if (req.headers['x-worker-secret'] !== CFG.workerSecret) {
     res.writeHead(401); res.end('unauthorized'); return;
   }
   let body = '';
   for await (const chunk of req) body += chunk;
-  let runId = null;
-  try { runId = JSON.parse(body || '{}').run_id || null; } catch {}
+  let payload = {};
+  try { payload = JSON.parse(body || '{}'); } catch {}
   try {
-    const counts = await drain(runId);
+    let out;
+    if (req.url.startsWith('/combine')) {
+      out = await combineDocs({ submissionIds: payload.submission_ids || [], clientSlug: payload.client_slug });
+    } else { // /run
+      const counts = await drain(payload.run_id || null);
+      out = { ok: true, run_id: payload.run_id || null, ...counts };
+    }
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ ok: true, run_id: runId, ...counts }));
+    res.end(JSON.stringify(out));
   } catch (e) {
     res.writeHead(500, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ ok: false, error: e.message }));
