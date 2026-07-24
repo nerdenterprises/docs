@@ -82,3 +82,40 @@ Scripts:
 - `tools/pull.mjs` — pull new files + manifest (`--dry` to preview).
 - `tools/mark-processed.mjs` — mark originals processed (by id, or `--client <slug>`).
 - `tools/lib.mjs` — shared helpers (dependency-free; Node 20.12+).
+
+## Automated processing (the "Clean Documents" app)
+
+The manual Cowork step above is superseded by a standalone, unattended pipeline
+you trigger from the admin panel (**Process ALL** / per-client **Process**) — no
+Claude Code, no permission prompts. See **[SETUP.md](SETUP.md)** (one-time keys)
+and **[worker/README.md](worker/README.md)** (deploy).
+
+```
+Admin panel (Google login)  ──▶  process-enqueue (Supabase Edge Fn, verifies admin/cron)
+     │ polls job_runs                    │ enqueue_run() → public.jobs (durable queue), returns 202
+     ▼                                   ▼  fire-and-forget
+ live progress                    Cloud Run worker (Node + poppler/qpdf/ocrmypdf)
+                                         └ per file: extract → classify (rules→Claude)
+                                            → rename → Drive upload + share link
+                                            → Notion row → mark submission processed
+ Cloud Scheduler ──(a few×/day, x-cron-secret)──▶ process-enqueue (mode=all)
+```
+
+**Conventions are code, not habit (this is the anti-drift guarantee).**
+`worker/notion.mjs` → `buildPageProperties()` is the *only* way a Notion row is
+written, and it hard-enforces, every time:
+- **🎭 Member** relation (fails the file to `needs_review` rather than writing an empty relation);
+- **Documents** = the Google Drive share link (external file);
+- **Tags** always include **"Claude"**.
+
+Pieces:
+| Path | Role |
+|------|------|
+| `supabase/functions/process-enqueue/` | Authenticated trigger; queues jobs, kicks worker |
+| `worker/` | Cloud Run container: extract → classify → file → log → mark processed |
+| `tools/mint-drive-token.mjs` | One-time Google Drive refresh-token minter |
+| DB: `jobs`, `job_runs`, `claim_next_job()`, `enqueue_run()`, `finalize_job()` | Durable queue + progress |
+
+Classification: deterministic account→vendor rules first (free/instant), then
+`claude-haiku-4-5` → `claude-sonnet-5` for unknown/low-confidence docs; scanned/
+encrypted PDFs go pdftotext → qpdf-decrypt → ocrmypdf → Claude-PDF as a last resort.

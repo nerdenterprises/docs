@@ -6,7 +6,7 @@
   <meta name="robots" content="noindex" />
   <title>Client Admin — Clean Books</title>
   <link rel="stylesheet" href="../assets/styles.css?v=4" />
-  <link rel="stylesheet" href="../assets/admin.css?v=3" />
+  <link rel="stylesheet" href="../assets/admin.css?v=4" />
 </head>
 <body>
   <div class="admin-wrap">
@@ -40,9 +40,23 @@
     <section id="dash" hidden>
       <div class="dash-head">
         <h1>Client Forms</h1>
-        <button id="addBtn" class="btn-primary">+ Add New Client</button>
+        <div class="head-actions">
+          <button id="processAllBtn" class="btn-ghost">⚙️ Process ALL documents</button>
+          <button id="addBtn" class="btn-primary">+ Add New Client</button>
+        </div>
       </div>
       <div id="banner" class="banner"></div>
+
+      <!-- live processing progress -->
+      <div id="progress" class="card progress-card" hidden>
+        <div class="progress-head">
+          <b id="progressTitle">Processing…</b>
+          <button id="progressClose" class="btn-ghost" hidden>Close</button>
+        </div>
+        <div class="progress-bar"><div id="progressFill" class="progress-fill"></div></div>
+        <div id="progressStats" class="muted"></div>
+      </div>
+
       <div class="card table-card">
         <table class="clients">
           <thead><tr><th>Client</th><th>Form URL</th><th>Created</th><th></th></tr></thead>
@@ -95,6 +109,6 @@
   </div>
 
   <script src="../config.js?v=4"></script>
-  <script type="module" src="../assets/admin.js?v=4"></script>
+  <script type="module" src="../assets/admin.js?v=5"></script>
 </body>
 </html>

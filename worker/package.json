@@ -1,0 +1,11 @@
+{
+  "name": "clean-documents-worker",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Cloud Run worker that files client documents into Drive + logs them in Notion.",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "node index.mjs"
+  }
+}

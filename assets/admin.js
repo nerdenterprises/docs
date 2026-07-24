@@ -43,6 +43,63 @@ function wire() {
   $("addForm").onsubmit = onCreate;
   $("editCancel").onclick = closeEdit;
   $("editForm").onsubmit = onEdit;
+  $("processAllBtn").onclick = () => processDocs("all", null);
+  $("progressClose").onclick = () => { $("progress").hidden = true; };
+}
+
+// ---- document processing ----
+let pollTimer = null;
+
+async function processDocs(mode, slug) {
+  if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+  showProgress(mode === "all" ? "Queuing all clients…" : `Queuing “${slug}”…`);
+  try {
+    const { data, error } = await supabase.functions.invoke("process-enqueue", { body: { mode, slug } });
+    let payload = data;
+    if (error) { try { payload = await error.context.json(); } catch { /* ignore */ } }
+    if (!payload?.ok) throw new Error(payload?.error || error?.message || "Enqueue failed");
+    if (!payload.queued) { finishProgress("Nothing new to process — queue is empty.", null); return; }
+    if (!payload.worker_kicked) banner("banner", "Queued, but the worker isn’t deployed yet — files will process once it’s live.", "error");
+    pollRun(payload.run_id);
+  } catch (e) {
+    finishProgress(e.message, null, true);
+  }
+}
+
+function pollRun(runId) {
+  const tick = async () => {
+    const { data: run } = await supabase.from("job_runs").select("*").eq("id", runId).single();
+    if (!run) return;
+    renderProgress(run);
+    if (run.status === "done") {
+      clearInterval(pollTimer); pollTimer = null;
+      finishProgress("✓ Done.", run);
+      loadClients();
+    }
+  };
+  tick();
+  pollTimer = setInterval(tick, 2500);
+}
+
+function showProgress(title) {
+  $("progressTitle").textContent = title;
+  $("progressStats").textContent = "";
+  $("progressFill").style.width = "0%";
+  $("progressClose").hidden = true;
+  $("progress").hidden = false;
+}
+function renderProgress(run) {
+  const total = run.queued_count || 0;
+  const finished = (run.done_count || 0) + (run.error_count || 0) + (run.review_count || 0);
+  $("progressFill").style.width = total ? `${Math.round((finished / total) * 100)}%` : "0%";
+  $("progressTitle").textContent = run.status === "done" ? "✓ Processing complete" : "Processing…";
+  $("progressStats").textContent =
+    `${run.done_count || 0} filed · ${run.review_count || 0} need review · ${run.error_count || 0} errors · ${total} total`;
+}
+function finishProgress(title, run, isError) {
+  $("progressTitle").textContent = (isError ? "⚠ " : "") + title;
+  if (run) renderProgress(run), ($("progressTitle").textContent = title);
+  $("progressClose").hidden = false;
 }
 
 function openEdit(slug) {
@@ -116,12 +173,14 @@ async function loadClients() {
       <td><a class="url-link" href="${url}" target="_blank" rel="noopener">${url}</a></td>
       <td class="muted">${fmtDate(c.created_at)}</td>
       <td><div class="row-actions">
+        <button class="btn-ghost" data-process="${esc(c.slug)}">Process</button>
         <button class="btn-ghost" data-edit="${esc(c.slug)}">Edit</button>
         <button class="btn-ghost" data-copy="${url}">Copy</button>
         <button class="btn-ghost" data-open="${url}">Open</button>
       </div></td>`;
     tbody.appendChild(tr);
   }
+  tbody.querySelectorAll("[data-process]").forEach((b) => (b.onclick = () => processDocs("client", b.dataset.process)));
   tbody.querySelectorAll("[data-copy]").forEach((b) =>
     (b.onclick = async () => { await navigator.clipboard.writeText(b.dataset.copy); b.textContent = "Copied!"; setTimeout(() => (b.textContent = "Copy"), 1200); }));
   tbody.querySelectorAll("[data-open]").forEach((b) => (b.onclick = () => window.open(b.dataset.open, "_blank")));

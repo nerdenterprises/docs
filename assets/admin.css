@@ -71,3 +71,11 @@ table.clients tr:last-child td { border-bottom: none; }
 }
 .modal-card h2 { margin: 0 0 16px; font-size: 20px; font-weight: 800; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 22px; }
+
+/* processing */
+.head-actions { display: flex; align-items: center; gap: 10px; }
+.progress-card { padding: 16px 18px; margin-bottom: 16px; }
+.progress-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.progress-bar { height: 8px; border-radius: 6px; background: #eee6d6; overflow: hidden; }
+.progress-fill { height: 100%; width: 0; background: var(--green); transition: width .4s ease; }
+#progressStats { margin-top: 8px; font-size: 13px; }
