@@ -6,7 +6,7 @@
   <meta name="robots" content="noindex" />
   <title>Client Admin — Clean Books</title>
   <link rel="stylesheet" href="../assets/styles.css?v=4" />
-  <link rel="stylesheet" href="../assets/admin.css?v=4" />
+  <link rel="stylesheet" href="../assets/admin.css?v=5" />
 </head>
 <body>
   <div class="admin-wrap">
@@ -79,6 +79,12 @@
         <p class="muted" id="urlPreview" style="font-size:13px;margin:8px 0 0"></p>
         <label>Client logo <span class="muted">(optional)</span></label>
         <input type="file" id="clogo" accept="image/*" />
+        <label class="req">Notion member</label>
+        <select id="cmember"><option value="">— loading members… —</option></select>
+        <div id="cnewmemberWrap" hidden>
+          <label class="req">New member name <span class="muted">(created in Notion — confirm exact spelling)</span></label>
+          <input type="text" id="cnewmember" placeholder="e.g. Personal – Shahnaz & Seth" autocomplete="off" />
+        </div>
         <div id="modalBanner" class="banner"></div>
         <div class="modal-actions">
           <button type="button" id="cancel" class="btn-ghost">Cancel</button>
@@ -109,6 +115,6 @@
   </div>
 
   <script src="../config.js?v=4"></script>
-  <script type="module" src="../assets/admin.js?v=5"></script>
+  <script type="module" src="../assets/admin.js?v=6"></script>
 </body>
 </html>

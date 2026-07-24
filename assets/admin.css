@@ -79,3 +79,11 @@ table.clients tr:last-child td { border-bottom: none; }
 .progress-bar { height: 8px; border-radius: 6px; background: #eee6d6; overflow: hidden; }
 .progress-fill { height: 100%; width: 0; background: var(--green); transition: width .4s ease; }
 #progressStats { margin-top: 8px; font-size: 13px; }
+
+/* member picker */
+.modal-card select {
+  width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px;
+  font-size: 14px; background: #fff; color: var(--ink); margin-top: 4px;
+}
+.modal-card select:focus { outline: none; border-color: var(--green); }
+#cnewmemberWrap { margin-top: 10px; }

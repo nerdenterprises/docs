@@ -40,6 +40,7 @@ function wire() {
   $("addBtn").onclick = openModal;
   $("cancel").onclick = closeModal;
   $("cname").oninput = $("cslug").oninput = updatePreview;
+  $("cmember").onchange = onMemberChange;
   $("addForm").onsubmit = onCreate;
   $("editCancel").onclick = closeEdit;
   $("editForm").onsubmit = onEdit;
@@ -192,6 +193,12 @@ async function onCreate(e) {
   const name = $("cname").value.trim();
   if (!name) { banner("modalBanner", "Please enter a client name.", "error"); return; }
   const slug = ($("cslug").value.trim() || slugify(name));
+
+  const memberVal = $("cmember").value;
+  const newMemberName = $("cnewmember").value.trim();
+  if (!memberVal) { banner("modalBanner", "Choose a Notion member (or create a new one).", "error"); return; }
+  if (memberVal === "__new__" && !newMemberName) { banner("modalBanner", "Enter the new member name.", "error"); return; }
+
   const btn = $("create");
   btn.disabled = true; btn.textContent = "Creating…";
 
@@ -207,7 +214,11 @@ async function onCreate(e) {
 
     // 2) Create the client (edge function commits form, uploads logo, registers client)
     const { data, error } = await supabase.functions.invoke("create-client", {
-      body: { name, slug, logo_base64, logo_content_type, logo_ext },
+      body: {
+        name, slug, logo_base64, logo_content_type, logo_ext,
+        member_page_id: memberVal === "__new__" ? undefined : memberVal,
+        new_member_name: memberVal === "__new__" ? newMemberName : undefined,
+      },
     });
     let payload = data;
     if (error) { try { payload = await error.context.json(); } catch { /* ignore */ } }
@@ -224,8 +235,43 @@ async function onCreate(e) {
 }
 
 // --- modal + helpers ---
-function openModal() { $("addForm").reset(); hideBanner("modalBanner"); updatePreview(); $("modal").hidden = false; $("cname").focus(); }
+function openModal() {
+  $("addForm").reset();
+  $("cnewmemberWrap").hidden = true;
+  hideBanner("modalBanner");
+  updatePreview();
+  $("modal").hidden = false;
+  $("cname").focus();
+  loadMembers();
+}
 function closeModal() { $("modal").hidden = true; }
+
+function onMemberChange() {
+  const isNew = $("cmember").value === "__new__";
+  $("cnewmemberWrap").hidden = !isNew;
+  if (isNew && !$("cnewmember").value) $("cnewmember").value = $("cname").value.trim();
+}
+
+async function loadMembers() {
+  const sel = $("cmember");
+  sel.innerHTML = '<option value="">— loading members… —</option>';
+  try {
+    const { data, error } = await supabase.functions.invoke("members", { body: {} });
+    let payload = data;
+    if (error) { try { payload = await error.context.json(); } catch { /* ignore */ } }
+    if (!payload?.ok) throw new Error(payload?.error || error?.message || "Could not load members");
+    const opts = ['<option value="">— choose an existing member —</option>'];
+    for (const m of payload.members) {
+      const label = m.taken ? `${m.name} — already linked to /${m.taken_by}` : m.name;
+      opts.push(`<option value="${esc(m.id)}"${m.taken ? " disabled" : ""}>${esc(label)}</option>`);
+    }
+    opts.push('<option value="__new__">➕ Create a new member…</option>');
+    sel.innerHTML = opts.join("");
+  } catch (e) {
+    sel.innerHTML = '<option value="">(couldn’t load — create new below)</option><option value="__new__">➕ Create a new member…</option>';
+    banner("modalBanner", e.message, "error");
+  }
+}
 function updatePreview() {
   const name = $("cname").value.trim();
   const slug = $("cslug").value.trim() || slugify(name);
