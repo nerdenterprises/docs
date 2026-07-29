@@ -1,5 +1,5 @@
 /* Admin dashboard — Clean Books styled. Builds on styles.css variables. */
-.admin-wrap { max-width: 920px; margin: 0 auto; padding: 28px 20px 80px; }
+.admin-wrap { max-width: 1200px; margin: 0 auto; padding: 28px 20px 80px; }
 
 .admin-head {
   display: flex; align-items: center; justify-content: space-between;
@@ -37,13 +37,26 @@
   background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Cpath fill='%23FFC107' d='M43.6 20.5H42V20H24v8h11.3c-1.6 4.7-6.1 8-11.3 8a12 12 0 1 1 0-24c3 0 5.8 1.1 7.9 3l5.7-5.7A20 20 0 1 0 24 44a20 20 0 0 0 19.6-23.5z'/%3E%3Cpath fill='%23FF3D00' d='M6.3 14.7l6.6 4.8A12 12 0 0 1 24 12c3 0 5.8 1.1 7.9 3l5.7-5.7A20 20 0 0 0 6.3 14.7z'/%3E%3Cpath fill='%234CAF50' d='M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2A12 12 0 0 1 12.7 28l-6.6 5.1A20 20 0 0 0 24 44z'/%3E%3Cpath fill='%231976D2' d='M43.6 20.5H42V20H24v8h11.3a12 12 0 0 1-4.1 5.6l6.2 5.2C39.9 35.8 44 30.5 44 24c0-1.2-.1-2.4-.4-3.5z'/%3E%3C/svg%3E") center/contain no-repeat;
 }
 
-.table-card { padding: 8px 8px; }
-table.clients { width: 100%; border-collapse: collapse; }
+.table-card { padding: 8px 8px; overflow-x: auto; }
+table.clients { width: 100%; border-collapse: collapse; table-layout: fixed; }
 table.clients th {
   text-align: left; font-size: 11px; letter-spacing: .6px; text-transform: uppercase;
   color: var(--muted); font-weight: 700; padding: 14px 14px; border-bottom: 1px solid var(--line);
+  position: relative; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-table.clients td { padding: 14px 14px; border-bottom: 1px solid var(--line); font-size: 14px; vertical-align: middle; }
+/* drag handle for column resizing */
+table.clients th .col-resizer {
+  position: absolute; top: 0; right: -4px; width: 9px; height: 100%;
+  cursor: col-resize; user-select: none; touch-action: none; z-index: 2;
+}
+table.clients th .col-resizer::after {
+  content: ""; position: absolute; top: 25%; bottom: 25%; left: 4px; width: 1px;
+  background: var(--line);
+}
+table.clients th .col-resizer:hover::after, table.clients th.col-resizing .col-resizer::after {
+  background: var(--muted); width: 2px;
+}
+table.clients td { padding: 14px 14px; border-bottom: 1px solid var(--line); font-size: 14px; vertical-align: middle; overflow: hidden; }
 table.clients tr:last-child td { border-bottom: none; }
 .cell-client { display: flex; align-items: center; gap: 12px; }
 .cell-client .logo {
@@ -52,7 +65,7 @@ table.clients tr:last-child td { border-bottom: none; }
 }
 .cell-client .name { font-weight: 700; }
 .cell-client .slug { color: var(--muted); font-size: 12px; }
-.url-link { color: var(--blue); text-decoration: none; word-break: break-all; }
+.url-link { color: var(--blue); text-decoration: none; white-space: nowrap; }
 .url-link:hover { text-decoration: underline; }
 .row-actions { display: flex; gap: 6px; justify-content: flex-end; }
 

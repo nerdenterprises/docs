@@ -50,6 +50,61 @@ function wire() {
   $("progressClose").onclick = () => { $("progress").hidden = true; };
   $("clientFilter").oninput = renderClients;
   $("clientSort").onchange = renderClients;
+  initColumnResize();
+}
+
+// ---- resizable table columns ----
+// The <thead> is static markup, so handles attached here survive every
+// tbody re-render in renderClients(). Widths persist to localStorage.
+function initColumnResize() {
+  const table = document.querySelector("table.clients");
+  if (!table || !table.tHead || table.dataset.resizable) return;
+  table.dataset.resizable = "1";
+
+  const ths = [...table.tHead.rows[0].cells];
+  const KEY = "admin.colWidths";
+  const MIN = 80;
+  const DEFAULTS = [260, 500, 100, 300]; // Client · Form URL · Created · actions
+  let widths = DEFAULTS.slice();
+  try {
+    const saved = JSON.parse(localStorage.getItem(KEY) || "null");
+    if (Array.isArray(saved) && saved.length === ths.length) widths = saved.map(Number);
+  } catch { /* ignore bad storage */ }
+
+  // A <colgroup> drives column widths under table-layout: fixed.
+  const colgroup = document.createElement("colgroup");
+  const cols = ths.map(() => colgroup.appendChild(document.createElement("col")));
+  table.insertBefore(colgroup, table.tHead);
+
+  const apply = () => {
+    cols.forEach((c, i) => (c.style.width = widths[i] + "px"));
+    table.style.width = widths.reduce((a, b) => a + b, 0) + "px";
+  };
+  apply();
+
+  // Drag handle on every header except the last column.
+  ths.forEach((th, i) => {
+    if (i === ths.length - 1) return;
+    const handle = document.createElement("div");
+    handle.className = "col-resizer";
+    th.appendChild(handle);
+    handle.addEventListener("pointerdown", (e) => {
+      e.preventDefault();
+      const startX = e.clientX;
+      const startW = widths[i];
+      th.classList.add("col-resizing");
+      handle.setPointerCapture(e.pointerId);
+      const move = (ev) => { widths[i] = Math.max(MIN, Math.round(startW + ev.clientX - startX)); apply(); };
+      const up = () => {
+        th.classList.remove("col-resizing");
+        handle.removeEventListener("pointermove", move);
+        handle.removeEventListener("pointerup", up);
+        try { localStorage.setItem(KEY, JSON.stringify(widths)); } catch { /* ignore */ }
+      };
+      handle.addEventListener("pointermove", move);
+      handle.addEventListener("pointerup", up);
+    });
+  });
 }
 
 // ---- document processing ----
