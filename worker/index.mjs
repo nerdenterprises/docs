@@ -13,6 +13,17 @@ import { combineDocs } from './combine.mjs';
 
 const extOf = (name) => (name.split('.').pop() || 'pdf').toLowerCase();
 
+// Drive stores whatever we send; the right type is what makes it previewable there.
+const MIME = {
+  pdf: 'application/pdf',
+  csv: 'text/csv',
+  tsv: 'text/tab-separated-values',
+  txt: 'text/plain',
+  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  xlsm: 'application/vnd.ms-excel.sheet.macroEnabled.12',
+  xls: 'application/vnd.ms-excel',
+};
+
 async function processOne(job) {
   const client = await supa.getClient(job.client_slug);
   if (!client) throw new Error(`Unknown client_slug ${job.client_slug}`);
@@ -48,7 +59,7 @@ async function processOne(job) {
       await supa.patchClient(client.slug, patch);
     }
     const bytes = await supa.downloadObject(job.file_path);
-    const mime = ext === 'csv' ? 'text/csv' : ext === 'pdf' ? 'application/pdf' : 'application/octet-stream';
+    const mime = MIME[ext] || 'application/octet-stream';
     const up = await drive.uploadFile(processedId, fileName, bytes, mime);
     result.drive_id = up.id;
     result.drive_link = up.webViewLink;
