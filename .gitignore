@@ -5,3 +5,5 @@ node_modules/
 Thumbs.db
 # Local working area for the processing pipeline (downloaded client files)
 /inbox/
+# Local Claude Code settings (machine-specific; launch.json is tracked)
+.claude/settings.local.json

@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "web",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "C:/Users/seth/Documents/Claude/cleandocuments/web", "run", "dev"],
+      "port": 3000
+    },
+    {
+      "name": "docs-static",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [".claude/serve.mjs"],
+      "port": 8791
+    }
+  ]
+}
