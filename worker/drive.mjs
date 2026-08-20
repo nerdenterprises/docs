@@ -59,11 +59,13 @@ export async function resolveProcessedFolder(client) {
   return { processed, clientFolder };
 }
 
-/** Upload bytes as a new file; return {id, webViewLink} with anyone-with-link reader access. */
-export async function uploadFile(folderId, filename, bytes, mime = 'application/pdf') {
-  const tok = await accessToken();
+// Google documents uploadType=multipart as good for 5MB or less. Above that the
+// resumable endpoint is the supported path — needed for video and big scans.
+const MULTIPART_MAX = 5 * 1024 * 1024;
+const CHUNK = 8 * 1024 * 1024; // must be a multiple of 256KB
+
+async function uploadMultipart(tok, meta, bytes, mime, filename) {
   const boundary = 'clean-docs-' + Buffer.from(filename).toString('hex').slice(0, 16);
-  const meta = JSON.stringify({ name: filename, parents: [folderId] });
   const body = Buffer.concat([
     Buffer.from(`--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${meta}\r\n`),
     Buffer.from(`--${boundary}\r\nContent-Type: ${mime}\r\n\r\n`),
@@ -76,7 +78,44 @@ export async function uploadFile(folderId, filename, bytes, mime = 'application/
     body,
   });
   if (!up.ok) throw new Error(`Drive upload -> ${up.status}: ${await up.text()}`);
-  const { id } = await up.json();
+  return (await up.json()).id;
+}
+
+async function uploadResumable(tok, meta, bytes, mime) {
+  const start = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${tok}`, 'Content-Type': 'application/json; charset=UTF-8',
+      'X-Upload-Content-Type': mime, 'X-Upload-Content-Length': String(bytes.length) },
+    body: meta,
+  });
+  if (!start.ok) throw new Error(`Drive resumable start -> ${start.status}: ${await start.text()}`);
+  const session = start.headers.get('location');
+  if (!session) throw new Error('Drive resumable start returned no session URL');
+
+  for (let off = 0; off < bytes.length;) {
+    const end = Math.min(off + CHUNK, bytes.length);
+    const res = await fetch(session, {
+      method: 'PUT',
+      headers: { 'Content-Length': String(end - off),
+        'Content-Range': `bytes ${off}-${end - 1}/${bytes.length}` },
+      body: bytes.subarray(off, end),
+    });
+    if (res.status === 200 || res.status === 201) return (await res.json()).id;
+    if (res.status !== 308) throw new Error(`Drive resumable chunk -> ${res.status}: ${await res.text()}`);
+    // 308: Google reports how much it actually kept; continue from there.
+    const range = res.headers.get('range');
+    off = range ? Number(range.split('-').pop()) + 1 : end;
+  }
+  throw new Error('Drive resumable upload ended without a file id');
+}
+
+/** Upload bytes as a new file; return {id, webViewLink} with anyone-with-link reader access. */
+export async function uploadFile(folderId, filename, bytes, mime = 'application/pdf') {
+  const tok = await accessToken();
+  const meta = JSON.stringify({ name: filename, parents: [folderId] });
+  const id = bytes.length > MULTIPART_MAX
+    ? await uploadResumable(tok, meta, bytes, mime)
+    : await uploadMultipart(tok, meta, bytes, mime, filename);
 
   // Anyone-with-the-link reader (matches existing behavior).
   await api(`files/${id}/permissions`, {

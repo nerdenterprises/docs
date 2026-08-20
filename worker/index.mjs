@@ -7,7 +7,7 @@ import * as supa from './supa.mjs';
 import * as drive from './drive.mjs';
 import * as notion from './notion.mjs';
 import { extractText } from './extract.mjs';
-import { classifyDoc } from './classify.mjs';
+import { classifyDoc, classifyStored } from './classify.mjs';
 import { buildName } from './rename.mjs';
 import { combineDocs } from './combine.mjs';
 
@@ -19,9 +19,32 @@ const MIME = {
   csv: 'text/csv',
   tsv: 'text/tab-separated-values',
   txt: 'text/plain',
+  md: 'text/markdown',
+  json: 'application/json',
+  html: 'text/html', htm: 'text/html',
+  rtf: 'application/rtf',
+  eml: 'message/rfc822',
+  // bank/accounting downloads — plain text under the hood, but the specific types
+  // stop Drive from offering to "open with" the wrong thing.
+  ofx: 'application/x-ofx', qfx: 'application/x-ofx',
+  qbo: 'application/vnd.intu.qbo', qif: 'application/qif',
+  // Office
   xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   xlsm: 'application/vnd.ms-excel.sheet.macroEnabled.12',
   xls: 'application/vnd.ms-excel',
+  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  doc: 'application/msword',
+  pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  ppt: 'application/vnd.ms-powerpoint',
+  // images
+  png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif',
+  webp: 'image/webp', heic: 'image/heic', heif: 'image/heif',
+  tif: 'image/tiff', tiff: 'image/tiff', bmp: 'image/bmp',
+  // media (stored, not classified)
+  mp4: 'video/mp4', mov: 'video/quicktime', avi: 'video/x-msvideo',
+  mkv: 'video/x-matroska', webm: 'video/webm', wmv: 'video/x-ms-wmv',
+  mp3: 'audio/mpeg', m4a: 'audio/mp4', wav: 'audio/wav', flac: 'audio/flac', ogg: 'audio/ogg',
+  zip: 'application/zip',
 };
 
 async function processOne(job) {
@@ -30,17 +53,41 @@ async function processOne(job) {
   const ext = extOf(job.original_filename || job.file_path);
   const result = { ...(job.result || {}) }; // resume from any checkpointed progress
 
+  // One download per job, shared by classify and the Drive upload (a 100MB video
+  // buffered twice is most of the instance's memory).
+  let cached = null;
+  const bytes = async () => (cached ??= await supa.downloadObject(job.file_path));
+
   // --- 1. classify (checkpointed): skip re-extraction/LLM on retry ---
   if (!result.cls) {
-    const bytes = await supa.downloadObject(job.file_path);
-    const { text, method, pdfBytes } = await extractText(bytes, ext);
-    const cls = await classifyDoc({ text, filename: job.original_filename, pdfBytes });
+    const ex = await extractText(await bytes(), ext);
+
+    // A type we can't read is a dead end, not a coin-flip: say so instead of
+    // letting the classifier guess from the filename and land in needs_review.
+    if (ex.kind === 'unsupported') {
+      await supa.finalizeJob(job.job_id, 'needs_review', { reason: ex.reason, method: ex.method }, null);
+      return 'needs_review';
+    }
+
+    // Media can't be read, so the uploader's note is the only real title available.
+    // Everything readable keeps the title the classifier derived from its contents.
+    let cls;
+    if (ex.kind === 'store') {
+      const note = await supa.getSubmissionNote(job.submission_id);
+      const shared = note ? await supa.noteIsShared(job.client_slug, note) : false;
+      cls = classifyStored(job.original_filename, note, shared);
+    } else {
+      cls = await classifyDoc({
+        text: ex.text, filename: job.original_filename,
+        pdfBytes: ex.pdfBytes, imageBytes: ex.imageBytes, imageMediaType: ex.imageMediaType,
+      });
+    }
     if (cls.needs_review) {
-      await supa.finalizeJob(job.job_id, 'needs_review', { reason: cls.reason, method }, null);
+      await supa.finalizeJob(job.job_id, 'needs_review', { reason: cls.reason, method: ex.method }, null);
       return 'needs_review';
     }
     result.cls = cls;
-    result.method = method;
+    result.method = ex.method;
     result.renamed = buildName(cls, ext);
     await supa.patchJobResult(job.job_id, result);
   }
@@ -58,9 +105,8 @@ async function processOne(job) {
       if (typeof r !== 'string' && r.clientFolder && !client.drive_folder_id) patch.drive_folder_id = r.clientFolder;
       await supa.patchClient(client.slug, patch);
     }
-    const bytes = await supa.downloadObject(job.file_path);
     const mime = MIME[ext] || 'application/octet-stream';
-    const up = await drive.uploadFile(processedId, fileName, bytes, mime);
+    const up = await drive.uploadFile(processedId, fileName, await bytes(), mime);
     result.drive_id = up.id;
     result.drive_link = up.webViewLink;
     await supa.patchJobResult(job.job_id, result);

@@ -45,9 +45,16 @@ export async function combineDocs({ submissionIds, clientSlug }) {
     if (!m.ok) throw new Error(`qpdf merge failed: ${m.stderr.slice(0, 200)}`);
     const mergedBytes = await readFile(out);
 
-    // classify the merged document for a coherent name
-    const { text } = await extractText(mergedBytes, 'pdf');
-    const cls = await classifyDoc({ text, filename: pdfs[0].original_filename, pdfBytes: mergedBytes });
+    // classify the merged document for a coherent name. Honor the extractor's verdict
+    // rather than force-feeding the merged PDF: a merge is exactly how you end up
+    // over the API's size/page limits for direct reads.
+    const ex = await extractText(mergedBytes, 'pdf');
+    const cls = ex.kind === 'unsupported'
+      ? { needs_review: true, reason: ex.reason }
+      : await classifyDoc({
+        text: ex.text, filename: pdfs[0].original_filename,
+        pdfBytes: ex.pdfBytes, imageBytes: ex.imageBytes, imageMediaType: ex.imageMediaType,
+      });
     let fileName;
     if (cls.needs_review) fileName = buildName({ suggested_name: (pdfs[0].original_filename || 'Combined Document').replace(/\.[^.]+$/, ''), date: null }, 'pdf');
     else fileName = buildName(cls, 'pdf');

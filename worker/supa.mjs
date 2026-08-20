@@ -56,6 +56,19 @@ export async function markSubmissionProcessed(id) {
   });
 }
 
+/** The uploader's note for one submission (claim_next_job doesn't carry it). */
+export async function getSubmissionNote(id) {
+  const res = await rest(`/rest/v1/submissions?id=eq.${encodeURIComponent(id)}&select=note`);
+  return (await res.json())[0]?.note || null;
+}
+
+/** True when the same note covers more than one file — so it can't be a unique title. */
+export async function noteIsShared(clientSlug, note) {
+  const res = await rest(`/rest/v1/submissions?client_slug=eq.${encodeURIComponent(clientSlug)}`
+    + `&note=eq.${encodeURIComponent(note)}&select=id&limit=2`);
+  return (await res.json()).length > 1;
+}
+
 /** Fetch multiple submissions by id (for combine). */
 export async function getSubmissions(ids) {
   const list = ids.map(encodeURIComponent).join(',');

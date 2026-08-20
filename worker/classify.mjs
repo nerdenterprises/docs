@@ -94,16 +94,21 @@ const SCHEMA = {
   required: ['vendor', 'doc_type', 'category', 'suggested_name', 'confidence'],
 };
 
-async function askClaude(model, { text, filename, pdfBytes }) {
+async function askClaude(model, { text, filename, pdfBytes, imageBytes, imageMediaType }) {
   const sys = 'You classify a business/financial document for filing. Return ONLY the classify tool call. '
     + 'vendor: use the MOST SPECIFIC issuer/brand actually named anywhere in the document (e.g. "Kaiser Permanente", "Chase", "PG&E"). '
     + 'Only use a generic label (e.g. "Medical Provider") if NO issuer name appears anywhere in the text. '
     + 'date: the single most relevant date (statement close / invoice / appointment date) as YYYY-MM-DD, else empty. '
-    + 'suggested_name: a clean, human, descriptive filename WITHOUT extension, leading with the vendor when known.';
+    + 'suggested_name: a clean, human, descriptive filename WITHOUT extension, leading with the vendor when known. '
+    + 'When the input is a photo or scan, read the document shown in it. If the input is genuinely not a '
+    + 'financial or business record, classify it honestly (category Reference or Support Documents) with a '
+    + 'descriptive name rather than forcing it into Banking or Expenses.';
   const content = [];
   content.push({ type: 'text', text: `Filename: ${filename}` });
   if (text && text.trim()) {
     content.push({ type: 'text', text: 'Document text follows:\n\n' + text.slice(0, 60_000) });
+  } else if (imageBytes) {
+    content.push({ type: 'image', source: { type: 'base64', media_type: imageMediaType, data: imageBytes.toString('base64') } });
   } else if (pdfBytes) {
     content.push({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: pdfBytes.toString('base64') } });
   }
@@ -129,14 +134,45 @@ async function askClaude(model, { text, filename, pdfBytes }) {
   return tool.input;
 }
 
-export async function classifyDoc({ text, filename, pdfBytes }) {
+/**
+ * A title from the uploader's note. Only used where nothing can be read from the file
+ * itself — a camera filename like PXL_20260820_200837367 carries no meaning, while
+ * "Caden testimonial" in the note box does. First line only, since notes are prose.
+ */
+export function titleFromNote(note) {
+  if (!note) return null;
+  let t = String(note).split(/\r?\n/)[0].replace(/\s+/g, ' ').trim();
+  t = t.replace(/[.!?,;:]+$/, '');
+  if (t.length > 100) t = t.slice(0, 100).replace(/\s+\S*$/, ''); // clip on a word boundary
+  return t.length >= 3 ? t : null;
+}
+
+/**
+ * Media (video/audio) is filed, never classified: there is nothing to read. The title
+ * comes from the uploader's note when there is one, else the client's own filename.
+ * `noteShared` is set when the same note covers several files in one upload, in which
+ * case the filename is kept as a discriminator so the rows stay tellable apart.
+ */
+export function classifyStored(filename, note = null, noteShared = false) {
+  const stem = String(filename || 'Media').replace(/\.[^.]+$/, '').trim() || 'Media';
+  const fromNote = titleFromNote(note);
+  const suggested_name = fromNote ? (noteShared ? `${fromNote} ${stem}` : fromNote) : stem;
+  return {
+    vendor: 'Media', doc_type: 'Media', category: 'Reference',
+    tags: ['Media'], suggested_name, confidence: 1, stored_only: true,
+    title_from: fromNote ? 'note' : 'filename',
+  };
+}
+
+export async function classifyDoc({ text, filename, pdfBytes, imageBytes, imageMediaType }) {
   const det = deterministic(text, filename);
   if (det && det.confidence >= CFG.minConfidence) return det;
 
-  let out = await askClaude(CFG.anthropic.model, { text, filename, pdfBytes });
+  const input = { text, filename, pdfBytes, imageBytes, imageMediaType };
+  let out = await askClaude(CFG.anthropic.model, input);
   if (out.needs_review) return out;
   if ((out.confidence ?? 0) < CFG.minConfidence) {
-    const better = await askClaude(CFG.anthropic.escalateModel, { text, filename, pdfBytes });
+    const better = await askClaude(CFG.anthropic.escalateModel, input);
     if (!better.needs_review) out = better;
   }
   if ((out.confidence ?? 0) < CFG.minConfidence) return { needs_review: true, reason: `low confidence ${out.confidence}` };

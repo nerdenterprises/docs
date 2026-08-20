@@ -5,7 +5,8 @@
 const sanitize = (s) =>
   String(s)
     .replace(/[\/\\:*?"<>|]/g, ' ')       // characters illegal in file names
-    .replace(/[^\w .,$()&%+#-]/g, ' ')     // keep a friendly ASCII-ish set
+    .replace(/[^\w .,$()&%+#'-]/g, ' ')    // keep a friendly ASCII-ish set (apostrophes included:
+                                           // "Caden's testimonial" must not become "Caden s")
     .replace(/\s+/g, ' ')
     .trim();
 

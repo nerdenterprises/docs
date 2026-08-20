@@ -2,63 +2,10 @@
 // classifier can read a spreadsheet the same way it reads a CSV. Pure Node (an
 // xlsx is a zip of XML, and zlib does the only heavy lifting) — no new deps, no
 // new native tools in the image.
-import { inflateRawSync } from 'node:zlib';
+import { readZip, unxml, textOf } from './ooxml.mjs';
 
 const MAX_ROWS_PER_SHEET = 300; // classify only ever reads the first ~60k chars
 const MAX_CHARS = 120_000;
-
-// --- zip ---------------------------------------------------------------------
-function readZip(buf) {
-  // End of central directory: scan back from the tail (max 64KB comment).
-  let eocd = -1;
-  for (let i = buf.length - 22; i >= Math.max(0, buf.length - 65_557); i--) {
-    if (buf.readUInt32LE(i) === 0x06054b50) { eocd = i; break; }
-  }
-  if (eocd < 0) throw new Error('not a zip (no EOCD)');
-  const count = buf.readUInt16LE(eocd + 10);
-  let p = buf.readUInt32LE(eocd + 16);
-  if (p === 0xffffffff) throw new Error('zip64 not supported');
-
-  const entries = new Map();
-  for (let n = 0; n < count && p + 46 <= buf.length; n++) {
-    if (buf.readUInt32LE(p) !== 0x02014b50) break;
-    const method = buf.readUInt16LE(p + 10);
-    const compSize = buf.readUInt32LE(p + 20);
-    const nameLen = buf.readUInt16LE(p + 28);
-    const extraLen = buf.readUInt16LE(p + 30);
-    const commentLen = buf.readUInt16LE(p + 32);
-    const localOff = buf.readUInt32LE(p + 42);
-    const name = buf.toString('utf8', p + 46, p + 46 + nameLen);
-    entries.set(name, { method, compSize, localOff });
-    p += 46 + nameLen + extraLen + commentLen;
-  }
-  return {
-    has: (name) => entries.has(name),
-    names: () => [...entries.keys()],
-    read(name) {
-      const e = entries.get(name);
-      if (!e) return null;
-      // Local header sizes can be zeroed (data descriptor); trust the central dir.
-      const nameLen = buf.readUInt16LE(e.localOff + 26);
-      const extraLen = buf.readUInt16LE(e.localOff + 28);
-      const start = e.localOff + 30 + nameLen + extraLen;
-      const raw = buf.subarray(start, start + e.compSize);
-      return (e.method === 0 ? raw : inflateRawSync(raw)).toString('utf8');
-    },
-  };
-}
-
-// --- xml ---------------------------------------------------------------------
-const ENT = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" };
-const unxml = (s) =>
-  s.replace(/&(#x?[0-9a-fA-F]+|amp|lt|gt|quot|apos);/g, (m, g) =>
-    g[0] === '#'
-      ? String.fromCodePoint(g[1] === 'x' || g[1] === 'X' ? parseInt(g.slice(2), 16) : parseInt(g.slice(1), 10))
-      : (ENT[g] ?? m));
-
-// All <t> text inside a chunk, concatenated (rich-text runs split a string across many).
-const textOf = (chunk) =>
-  [...chunk.matchAll(/<t(?:\s[^>]*)?>([\s\S]*?)<\/t>/g)].map((m) => unxml(m[1])).join('');
 
 // --- dates -------------------------------------------------------------------
 // A serial with a date number format is worth far more to the classifier as
