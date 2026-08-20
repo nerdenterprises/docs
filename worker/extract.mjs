@@ -22,6 +22,11 @@ const MAX_PDF_PAGES = 100;                  // API cap for document input
 
 const enough = (t) => (t || '').replace(/\s/g, '').length >= MIN_TEXT;
 
+// sniff() falls back to the extension when the bytes say nothing, so something
+// merely NAMED .pdf can reach the PDF cascade. Never hand those to Claude's
+// document endpoint: a non-PDF payload is a 400 that kills the job.
+const looksPdf = (b) => b.toString('latin1', 0, 1024).includes('%PDF-');
+
 // Read as text when the bytes are plainly text. These extensions are the ones a
 // bookkeeping client actually sends; .ofx/.qfx/.qbo/.qif are bank downloads.
 const TEXT_EXT = new Set(['csv', 'tsv', 'txt', 'md', 'json', 'ofx', 'qfx', 'qbo', 'qif', 'eml', 'log']);
@@ -152,6 +157,10 @@ async function fromPdf(bytes, method0) {
     if (pages && pages > MAX_PDF_PAGES) {
       return { kind: 'unsupported', method: 'none',
         reason: `no text layer and ${pages} pages (over the ${MAX_PDF_PAGES}-page direct-read limit)` };
+    }
+    if (!looksPdf(bytes)) {
+      return { kind: 'unsupported', method: 'none',
+        reason: 'not a readable PDF (no %PDF- header) — the file may be corrupt or misnamed' };
     }
     return { kind: 'pdf', pdfBytes: bytes, method: method0 ? `${method0}-none` : 'none' };
   } finally {
