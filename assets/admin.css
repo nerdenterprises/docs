@@ -117,12 +117,30 @@ table.clients tr:last-child td { border-bottom: none; }
 
 /* needs review */
 .review-card { padding: 14px 18px; margin-bottom: 16px; border-left: 4px solid var(--err); }
+.review-card.only-judgement { border-left-color: var(--blue); }
 .review-head { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
 .review-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); }
 .review-row:first-of-type { border-top: none; }
 .review-name { font-weight: 600; font-size: 14px; word-break: break-word; }
 .review-meta { font-size: 12px; margin-top: 2px; }
 .review-actions { display: flex; gap: 6px; flex: none; align-items: center; }
+
+/* "Needs review" covers two very different situations. Label them so a judgement
+   call ("read it, unsure how to file it") doesn't read like a failure. */
+.review-group {
+  display: flex; align-items: baseline; gap: 8px; margin: 16px 0 2px;
+  font-size: 11px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase;
+}
+.review-group:first-child { margin-top: 0; }
+.review-group .n { font-weight: 600; letter-spacing: 0; text-transform: none; color: var(--muted); }
+.review-group.judgement { color: var(--blue); }
+.review-group.unread { color: var(--err); }
+.review-group + .review-row { border-top: none; }
+.review-how { font-size: 12px; margin-top: 3px; }
+.review-method {
+  font-size: 11px; font-weight: 700; padding: 1px 6px; border-radius: 999px;
+  border: 1px solid var(--line); color: var(--muted); white-space: nowrap;
+}
 
 /* possible split documents */
 .splits-card { padding: 14px 18px; margin-bottom: 16px; border-left: 4px solid var(--blue); }

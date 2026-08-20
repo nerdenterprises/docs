@@ -165,6 +165,26 @@ function finishProgress(title, run, isError) {
 }
 
 // ---- needs review ----
+// `result.method` records how the file was read. A real value means the content was
+// extracted and the classifier saw the document; "none" means nothing was extracted
+// and any score came from the filename alone; a "-empty"/"-failed" suffix means the
+// reader ran but produced nothing usable.
+const didRead = (m) => !!m && m !== "none" && !/-(empty|failed)$/.test(m);
+
+// Read it, but unsure how to file it — a judgement call, not a failure.
+const isJudgement = (j) =>
+  j.status === "needs_review" && didRead(j.result?.method) && /^low confidence/i.test(j.result?.reason || "");
+
+// Only add a hint when the reason line doesn't already say it.
+function reviewHow(j) {
+  const m = j.result?.method, reason = String(j.result?.reason || "");
+  if (j.status === "error") return "Failed part-way through — Retry is safe, finished steps are skipped.";
+  if (isJudgement(j)) return "The document was read; only the filing category is uncertain. Retry re-asks, or file it by hand.";
+  if (/re-save|export|individually|re-upload|limit/i.test(reason)) return ""; // reason is already actionable
+  if (m === "none") return "Nothing could be extracted, so any guess came from the filename. Retrying will not change that.";
+  return "";
+}
+
 async function loadReview() {
   const { data, error } = await supabase
     .from("jobs")
@@ -174,25 +194,49 @@ async function loadReview() {
 
   const card = $("review"), list = $("reviewList");
   if (error || !data || data.length === 0) { card.hidden = true; return; }
-  $("reviewCount").textContent = `${data.length} item${data.length === 1 ? "" : "s"}`;
+
+  // "Couldn't read" first: those need someone to re-upload, so they have the longest
+  // lead time. Judgement calls can be cleared whenever.
+  const unread = data.filter((j) => !isJudgement(j));
+  const judgement = data.filter(isJudgement);
+  // Don't paint the card red when nothing is actually broken.
+  card.classList.toggle("only-judgement", unread.length === 0);
+  $("reviewCount").textContent = [
+    unread.length ? `${unread.length} couldn't be read` : "",
+    judgement.length ? `${judgement.length} awaiting your call` : "",
+  ].filter(Boolean).join(" · ");
+
   list.innerHTML = "";
-  for (const j of data) {
-    const fn = j.submissions?.original_filename || "(unknown file)";
-    const reason = j.status === "error" ? (j.error_text || "error") : (j.result?.reason || "low confidence");
-    const link = j.result?.drive_link;
-    const badge = j.status === "error" ? "⛔ error" : "🔎 needs review";
-    const row = document.createElement("div");
-    row.className = "review-row";
-    row.innerHTML = `
-      <div class="review-info">
-        <div class="review-name">${esc(fn)}</div>
-        <div class="review-meta muted">/${esc(j.client_slug)} · ${badge} · ${esc(String(reason).slice(0, 160))}</div>
-      </div>
-      <div class="review-actions">
-        ${link ? `<button class="btn-ghost" data-review-open="${esc(link)}">Open</button>` : ""}
-        <button class="btn-ghost" data-review-retry="${esc(j.id)}">Retry</button>
-      </div>`;
-    list.appendChild(row);
+  const groups = [
+    ["unread", "⛔ Couldn't read", "needs a re-upload in a readable format", unread],
+    ["judgement", "🔎 Needs your call", "read fine — only the category is uncertain", judgement],
+  ];
+  for (const [cls, label, blurb, rows] of groups) {
+    if (!rows.length) continue;
+    const head = document.createElement("div");
+    head.className = `review-group ${cls}`;
+    head.innerHTML = `<span>${label}</span><span class="n">${rows.length} · ${esc(blurb)}</span>`;
+    list.appendChild(head);
+
+    for (const j of rows) {
+      const fn = j.submissions?.original_filename || "(unknown file)";
+      const reason = j.status === "error" ? (j.error_text || "error") : (j.result?.reason || "low confidence");
+      const link = j.result?.drive_link;
+      const how = reviewHow(j);
+      const row = document.createElement("div");
+      row.className = "review-row";
+      row.innerHTML = `
+        <div class="review-info">
+          <div class="review-name">${esc(fn)}</div>
+          <div class="review-meta muted">/${esc(j.client_slug)} · <span class="review-method">read: ${esc(j.result?.method || "nothing")}</span> · ${esc(String(reason).slice(0, 160))}</div>
+          ${how ? `<div class="review-how muted">${esc(how)}</div>` : ""}
+        </div>
+        <div class="review-actions">
+          ${link ? `<button class="btn-ghost" data-review-open="${esc(link)}">Open</button>` : ""}
+          <button class="btn-ghost" data-review-retry="${esc(j.id)}">Retry</button>
+        </div>`;
+      list.appendChild(row);
+    }
   }
   list.querySelectorAll("[data-review-open]").forEach((b) => (b.onclick = () => window.open(b.dataset.reviewOpen, "_blank")));
   list.querySelectorAll("[data-review-retry]").forEach((b) => (b.onclick = () => retryJob(b.dataset.reviewRetry, b)));
