@@ -165,11 +165,13 @@ function finishProgress(title, run, isError) {
 }
 
 // ---- needs review ----
-// `result.method` records how the file was read. A real value means the content was
-// extracted and the classifier saw the document; "none" means nothing was extracted
-// and any score came from the filename alone; a "-empty"/"-failed" suffix means the
-// reader ran but produced nothing usable.
-const didRead = (m) => !!m && m !== "none" && !/-(empty|failed)$/.test(m);
+// `result.method` records which reader produced the text. "none" does NOT mean the
+// document was never read: for a real PDF with no text layer the bytes still go to
+// Claude's document endpoint, which reads it directly. The giveaway is the reason —
+// a confidence score can only exist because the classifier saw the document, while a
+// genuinely unreadable file carries an explanatory reason instead. A "-empty" or
+// "-failed" suffix is the true "nothing was extracted" case.
+const didRead = (m) => !!m && !/-(empty|failed)$/.test(m);
 
 // Read it, but unsure how to file it — a judgement call, not a failure.
 const isJudgement = (j) =>
@@ -180,8 +182,8 @@ function reviewHow(j) {
   const m = j.result?.method, reason = String(j.result?.reason || "");
   if (j.status === "error") return "Failed part-way through — Retry is safe, finished steps are skipped.";
   if (isJudgement(j)) return "The document was read; only the filing category is uncertain. Retry re-asks, or file it by hand.";
-  if (/re-save|export|individually|re-upload|limit/i.test(reason)) return ""; // reason is already actionable
-  if (m === "none") return "Nothing could be extracted, so any guess came from the filename. Retrying will not change that.";
+  if (/re-save|export|individually|re-upload|limit|corrupt|misnamed/i.test(reason)) return ""; // already actionable
+  if (!didRead(m)) return "No text could be extracted, so any guess came from the filename. Retrying will not change that — Trash it, or re-upload a readable copy.";
   return "";
 }
 
@@ -234,13 +236,32 @@ async function loadReview() {
         <div class="review-actions">
           ${link ? `<button class="btn-ghost" data-review-open="${esc(link)}">Open</button>` : ""}
           <button class="btn-ghost" data-review-retry="${esc(j.id)}">Retry</button>
+          <button class="btn-trash" data-review-trash="${esc(j.id)}" data-name="${esc(fn)}">Trash</button>
         </div>`;
       list.appendChild(row);
     }
   }
   list.querySelectorAll("[data-review-open]").forEach((b) => (b.onclick = () => window.open(b.dataset.reviewOpen, "_blank")));
   list.querySelectorAll("[data-review-retry]").forEach((b) => (b.onclick = () => retryJob(b.dataset.reviewRetry, b)));
+  list.querySelectorAll("[data-review-trash]").forEach((b) => (b.onclick = () => trashJob(b.dataset.reviewTrash, b.dataset.name, b)));
   card.hidden = false;
+}
+
+// Take a stuck item off the list for good. Soft delete: the row and the file in
+// Storage both survive, so a mistake is recoverable, but 'discarded' is inert —
+// enqueue_run() only picks up 'new' submissions, so "Process ALL" can't revive it.
+async function trashJob(jobId, filename, btn) {
+  if (!confirm(`Trash "${filename}"?\n\nIt leaves this list for good and won't be processed again.\nThe uploaded file itself stays in storage, so this can be undone.`)) return;
+  btn.disabled = true; btn.textContent = "Trashing…";
+  try {
+    const { error } = await supabase.rpc("discard_job", { p_job_id: jobId });
+    if (error) throw new Error(error.message);
+    banner("banner", `🗑 Trashed "${filename}".`, "ok");
+    loadReview();
+  } catch (e) {
+    banner("banner", `Could not trash that: ${e.message}`, "error");
+    btn.disabled = false; btn.textContent = "Trash";
+  }
 }
 
 async function retryJob(jobId, btn) {

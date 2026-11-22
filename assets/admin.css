@@ -137,6 +137,16 @@ table.clients tr:last-child td { border-bottom: none; }
 .review-group.unread { color: var(--err); }
 .review-group + .review-row { border-top: none; }
 .review-how { font-size: 12px; margin-top: 3px; }
+/* Destructive, so it reads as destructive — but quietly, since it sits next to
+   Retry on every row and shouldn't be the thing the eye lands on first. */
+.btn-trash {
+  background: #fff; color: var(--err); border: 1px solid var(--line); border-radius: 10px;
+  padding: 7px 12px; font-size: 13px; font-weight: 700; cursor: pointer;
+  transition: background .15s, border-color .15s;
+}
+.btn-trash:hover:not(:disabled) { background: rgba(214, 73, 47, .08); border-color: var(--err); }
+.btn-trash:disabled { opacity: .5; cursor: not-allowed; }
+
 .review-method {
   font-size: 11px; font-weight: 700; padding: 1px 6px; border-radius: 999px;
   border: 1px solid var(--line); color: var(--muted); white-space: nowrap;
