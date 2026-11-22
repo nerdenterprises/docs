@@ -268,13 +268,26 @@ async function retryJob(jobId, btn) {
   btn.disabled = true; btn.textContent = "Retrying…";
   try {
     const { data, error } = await supabase.functions.invoke("process-enqueue", { body: { mode: "retry", job_id: jobId } });
+
+    // Distinguish "the server said no" from "the request never left this tab".
+    // Without that, both surfaced as a bare "Retry failed" and there was no way
+    // to tell a rejection from a blocked fetch — server logs only show the former.
+    const status = error?.context?.status;
     let payload = data;
-    if (error) { try { payload = await error.context.json(); } catch { /* ignore */ } }
-    if (!payload?.ok) throw new Error(payload?.error || error?.message || "Retry failed");
+    if (error) { try { payload = await error.context.json(); } catch { /* non-JSON body */ } }
+
+    if (!payload?.ok) {
+      console.error("[retry] failed", { jobId, status, payload, error });
+      throw new Error(
+        status
+          ? `server refused it: ${status}${payload?.error ? ` — ${payload.error}` : ""}`
+          : `the request never reached the server (${error?.message || "blocked, offline, or an extension"}) — check the browser console`,
+      );
+    }
     banner("banner", "↻ Retrying — this refreshes in a few seconds.", "ok");
     setTimeout(() => { loadReview(); loadClients(); }, 4000);
   } catch (e) {
-    banner("banner", e.message, "error");
+    banner("banner", `Retry failed — ${e.message}`, "error");
     btn.disabled = false; btn.textContent = "Retry";
   }
 }
